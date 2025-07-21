@@ -5,6 +5,24 @@ class LogAnalyzer {
     this.charts = {}
     this.botPatterns = this.initializeBotPatterns()
     this.initializeEventListeners()
+
+    // Statistics accumulators - process data without storing all entries
+    this.stats = {
+      totalEntries: 0,
+      uniqueUrls: new Set(),
+      statusCodes: {},
+      totalBytes: 0,
+      botRequests: 0,
+      humanRequests: 0,
+      uniqueBots: new Set(),
+      botsByType: {},
+      botStats: {},
+      urlCounts: {},
+      ipCounts: {},
+      dailyData: {},
+      minDate: null,
+      maxDate: null,
+    }
   }
 
   initializeBotPatterns() {
@@ -88,6 +106,8 @@ class LogAnalyzer {
     const analyzeBtn = document.getElementById("analyzeBtn")
     const dropbox = document.getElementById("dropbox")
     const removeFileBtn = document.getElementById("removeFile")
+    const clearDataBtn = document.getElementById("clearData")
+    const exportReportBtn = document.getElementById("exportReport")
 
     // Date range controls
     const applyDateRangeBtn = document.getElementById("applyDateRange")
@@ -126,7 +146,6 @@ class LogAnalyzer {
       const files = e.dataTransfer.files
       if (files.length > 0) {
         const file = files[0]
-        // Check if it's a valid file type
         if (file.type === "text/plain" || file.name.endsWith(".log") || file.name.endsWith(".txt")) {
           fileInput.files = files
           this.handleFileSelection(file)
@@ -147,14 +166,27 @@ class LogAnalyzer {
       this.analyzeLogFile()
     })
 
-    // Date range event listeners
-    applyDateRangeBtn.addEventListener("click", () => {
-      this.applyDateFilter()
+    // Header button handlers
+    clearDataBtn.addEventListener("click", () => {
+      this.clearAllData()
     })
 
-    resetDateRangeBtn.addEventListener("click", () => {
-      this.resetDateFilter()
+    exportReportBtn.addEventListener("click", () => {
+      this.exportFullReport()
     })
+
+    // Date range event listeners
+    if (applyDateRangeBtn) {
+      applyDateRangeBtn.addEventListener("click", () => {
+        this.applyDateFilter()
+      })
+    }
+
+    if (resetDateRangeBtn) {
+      resetDateRangeBtn.addEventListener("click", () => {
+        this.resetDateFilter()
+      })
+    }
 
     quickFilterBtns.forEach((btn) => {
       btn.addEventListener("click", (e) => {
@@ -170,6 +202,7 @@ class LogAnalyzer {
     const fileName = document.getElementById("fileName")
     const fileSize = document.getElementById("fileSize")
     const analyzeBtn = document.getElementById("analyzeBtn")
+    const fileSizeWarning = document.getElementById("fileSizeWarning")
 
     // Hide dropbox content and show file info
     dropboxContent.classList.add("hidden")
@@ -178,6 +211,14 @@ class LogAnalyzer {
     // Update file details
     fileName.textContent = file.name
     fileSize.textContent = this.formatFileSize(file.size)
+
+    // Show warning for large files
+    const fileSizeMB = file.size / (1024 * 1024)
+    if (fileSizeMB > 25) {
+      fileSizeWarning.classList.remove("hidden")
+    } else {
+      fileSizeWarning.classList.add("hidden")
+    }
 
     // Enable analyze button
     analyzeBtn.disabled = false
@@ -188,6 +229,7 @@ class LogAnalyzer {
     const dropboxContent = document.querySelector(".dropbox-content")
     const fileInfo = document.getElementById("fileInfo")
     const analyzeBtn = document.getElementById("analyzeBtn")
+    const fileSizeWarning = document.getElementById("fileSizeWarning")
 
     // Clear file input
     fileInput.value = ""
@@ -195,9 +237,47 @@ class LogAnalyzer {
     // Show dropbox content and hide file info
     dropboxContent.classList.remove("hidden")
     fileInfo.classList.add("hidden")
+    fileSizeWarning.classList.add("hidden")
 
     // Disable analyze button
     analyzeBtn.disabled = true
+  }
+
+  clearAllData() {
+    // Clear all data and reset UI
+    this.logData = []
+    this.filteredLogData = []
+    this.resetStats()
+    this.destroyExistingCharts()
+
+    // Hide results and clear file selection
+    document.getElementById("results").classList.add("hidden")
+    this.clearFileSelection()
+
+    // Reset progress bar
+    const progressBar = document.getElementById("progressBar")
+    if (progressBar) {
+      progressBar.style.width = "0%"
+    }
+  }
+
+  resetStats() {
+    this.stats = {
+      totalEntries: 0,
+      uniqueUrls: new Set(),
+      statusCodes: {},
+      totalBytes: 0,
+      botRequests: 0,
+      humanRequests: 0,
+      uniqueBots: new Set(),
+      botsByType: {},
+      botStats: {},
+      urlCounts: {},
+      ipCounts: {},
+      dailyData: {},
+      minDate: null,
+      maxDate: null,
+    }
   }
 
   formatFileSize(bytes) {
@@ -214,96 +294,245 @@ class LogAnalyzer {
 
     if (!file) return
 
+    // Check file size and warn user
+    const fileSizeMB = file.size / (1024 * 1024)
+    if (fileSizeMB > 100) {
+      const proceed = confirm(
+        `This file is ${fileSizeMB.toFixed(1)}MB. Large files may take several minutes to process and could slow down your browser. Continue?`,
+      )
+      if (!proceed) return
+    }
+
     this.showLoading(true)
+    this.resetStats()
 
     try {
-      const text = await this.readFile(file)
-      this.logData = this.parseLogFile(text)
-      this.displayResults()
+      // Use streaming line-by-line processing
+      document.getElementById("loadingStatus").textContent = "Processing log entries..."
+      this.updateProgress(0)
+
+      await this.processFileLineByLine(file)
+
+      document.getElementById("loadingStatus").textContent = "Generating analysis..."
+      this.updateProgress(90)
+      await new Promise((resolve) => setTimeout(resolve, 100))
+
+      await this.displayResults()
+      this.updateProgress(100)
     } catch (error) {
       console.error("Error analyzing log file:", error)
-      alert("Error analyzing log file. Please check the file format.")
+      alert(`Error analyzing log file: ${error.message}. Please check the file format or try a smaller file.`)
     } finally {
       this.showLoading(false)
     }
   }
 
-  readFile(file) {
+  async processFileLineByLine(file) {
+    const chunkSize = 64 * 1024 // 64KB chunks
+    let offset = 0
+    let buffer = ""
+    let processedLines = 0
+
+    const logRegex = /^(\S+) \S+ \S+ \[([^\]]+)\] "(\S+) ([^"]*) HTTP\/[\d.]+" (\d+) (\d+|-) "([^"]*)" "([^"]*)"/
+
+    while (offset < file.size) {
+      // Read chunk
+      const chunk = file.slice(offset, offset + chunkSize)
+      const text = await this.readChunk(chunk)
+      buffer += text
+      offset += chunkSize
+
+      // Process complete lines
+      const lines = buffer.split("\n")
+      buffer = lines.pop() || "" // Keep incomplete line in buffer
+
+      // Process each complete line
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim()
+        if (line) {
+          this.processLogLine(line, logRegex)
+          processedLines++
+
+          // Update progress every 1000 lines
+          if (processedLines % 1000 === 0) {
+            const progress = Math.min((offset / file.size) * 80, 80)
+            this.updateProgress(progress)
+
+            const statusElement = document.getElementById("loadingStatus")
+            if (statusElement) {
+              statusElement.textContent = `Processed ${processedLines.toLocaleString()} entries...`
+            }
+
+            // Yield control to prevent blocking
+            await new Promise((resolve) => setTimeout(resolve, 1))
+          }
+        }
+      }
+    }
+
+    // Process any remaining line in buffer
+    if (buffer.trim()) {
+      this.processLogLine(buffer.trim(), logRegex)
+      processedLines++
+    }
+
+    this.updateProgress(80)
+    console.log(`Processed ${processedLines} log entries`)
+  }
+
+  readChunk(chunk) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader()
       reader.onload = (e) => resolve(e.target.result)
       reader.onerror = reject
-      reader.readAsText(file)
+      reader.readAsText(chunk)
     })
   }
 
-  parseLogFile(text) {
-    // Split by IP address pattern to handle concatenated entries
-    const logRegex = /^(\S+) \S+ \S+ \[([^\]]+)\] "(\S+) ([^"]*) HTTP\/[\d.]+" (\d+) (\d+|-) "([^"]*)" "([^"]*)"/gm
-    const logEntries = []
+  processLogLine(line, logRegex) {
+    const match = logRegex.exec(line)
+    if (!match) return
 
-    let match
-    while ((match = logRegex.exec(text)) !== null) {
-      const [, ip, timestamp, method, url, status, size, referer, userAgent] = match
+    const [, ip, timestamp, method, url, status, size, referer, userAgent] = match
 
-      // Parse timestamp - handle both formats: +0000 and -0400
-      let parsedDate
-      try {
-        // Handle format: 15/Oct/2019:19:41:46 +0000 or 13/Jul/2015:07:18:58 -0400
-        const timestampStr = timestamp.replace(
-          /(\d{2})\/(\w{3})\/(\d{4}):(\d{2}):(\d{2}):(\d{2}) ([+-]\d{4})/,
-          "$1 $2 $3 $4:$5:$6",
-        )
+    // Parse timestamp
+    let parsedDate
+    try {
+      const timestampStr = timestamp.replace(
+        /(\d{2})\/(\w{3})\/(\d{4}):(\d{2}):(\d{2}):(\d{2}) ([+-]\d{4})/,
+        "$1 $2 $3 $4:$5:$6",
+      )
 
-        const months = {
-          Jan: 0,
-          Feb: 1,
-          Mar: 2,
-          Apr: 3,
-          May: 4,
-          Jun: 5,
-          Jul: 6,
-          Aug: 7,
-          Sep: 8,
-          Oct: 9,
-          Nov: 10,
-          Dec: 11,
-        }
-
-        const [day, monthStr, year, time] = timestampStr.split(" ")
-        const [hour, minute, second] = time.split(":")
-        parsedDate = new Date(
-          Number.parseInt(year),
-          months[monthStr],
-          Number.parseInt(day),
-          Number.parseInt(hour),
-          Number.parseInt(minute),
-          Number.parseInt(second),
-        )
-      } catch (error) {
-        console.warn("Failed to parse timestamp:", timestamp)
-        parsedDate = new Date()
+      const months = {
+        Jan: 0,
+        Feb: 1,
+        Mar: 2,
+        Apr: 3,
+        May: 4,
+        Jun: 5,
+        Jul: 6,
+        Aug: 7,
+        Sep: 8,
+        Oct: 9,
+        Nov: 10,
+        Dec: 11,
       }
 
-      // Detect bot information
-      const botInfo = this.detectBot(userAgent)
-      if (botInfo.name === "Unknown Bot") {
-        console.log(`Unknown bot detected: ${userAgent}`)
-      }
-      logEntries.push({
-        ip,
-        timestamp: parsedDate,
-        method,
-        url: url || "/",
-        status: Number.parseInt(status),
-        size: size === "-" ? 0 : Number.parseInt(size),
-        referer,
-        userAgent,
-        botInfo,
-      })
+      const [day, monthStr, year, time] = timestampStr.split(" ")
+      const [hour, minute, second] = time.split(":")
+      parsedDate = new Date(
+        Number.parseInt(year),
+        months[monthStr],
+        Number.parseInt(day),
+        Number.parseInt(hour),
+        Number.parseInt(minute),
+        Number.parseInt(second),
+      )
+    } catch (error) {
+      parsedDate = new Date()
     }
 
-    return logEntries
+    // Update statistics
+    this.updateStats({
+      ip,
+      timestamp: parsedDate,
+      method,
+      url: url || "/",
+      status: Number.parseInt(status),
+      size: size === "-" ? 0 : Number.parseInt(size),
+      referer,
+      userAgent,
+    })
+  }
+
+  updateStats(entry) {
+    this.stats.totalEntries++
+    this.stats.uniqueUrls.add(entry.url)
+
+    const statusClass = Math.floor(entry.status / 100)
+    this.stats.statusCodes[statusClass] = (this.stats.statusCodes[statusClass] || 0) + 1
+    this.stats.totalBytes += entry.size
+
+    // Update date range
+    if (!this.stats.minDate || entry.timestamp < this.stats.minDate) {
+      this.stats.minDate = entry.timestamp
+    }
+    if (!this.stats.maxDate || entry.timestamp > this.stats.maxDate) {
+      this.stats.maxDate = entry.timestamp
+    }
+
+    // Daily data
+    const dateKey = entry.timestamp.toISOString().split("T")[0]
+    if (!this.stats.dailyData[dateKey]) {
+      this.stats.dailyData[dateKey] = {
+        total: 0,
+        bots: 0,
+        humans: 0,
+        statusCodes: { 2: 0, 3: 0, 4: 0, 5: 0 },
+      }
+    }
+    this.stats.dailyData[dateKey].total++
+    this.stats.dailyData[dateKey].statusCodes[statusClass] =
+      (this.stats.dailyData[dateKey].statusCodes[statusClass] || 0) + 1
+
+    // Bot detection
+    const botInfo = this.detectBot(entry.userAgent)
+    if (botInfo.isBot) {
+      this.stats.botRequests++
+      this.stats.uniqueBots.add(botInfo.name)
+      this.stats.dailyData[dateKey].bots++
+
+      if (!this.stats.botsByType[botInfo.type]) {
+        this.stats.botsByType[botInfo.type] = 0
+      }
+      this.stats.botsByType[botInfo.type]++
+
+      if (!this.stats.botStats[botInfo.name]) {
+        this.stats.botStats[botInfo.name] = {
+          name: botInfo.name,
+          type: botInfo.type,
+          company: botInfo.company,
+          count: 0,
+          lastSeen: entry.timestamp,
+        }
+      }
+      this.stats.botStats[botInfo.name].count++
+      if (entry.timestamp > this.stats.botStats[botInfo.name].lastSeen) {
+        this.stats.botStats[botInfo.name].lastSeen = entry.timestamp
+      }
+    } else {
+      this.stats.humanRequests++
+      this.stats.dailyData[dateKey].humans++
+    }
+
+    // URL counts (keep only top 100 to save memory)
+    this.stats.urlCounts[entry.url] = (this.stats.urlCounts[entry.url] || 0) + 1
+    if (Object.keys(this.stats.urlCounts).length > 1000) {
+      this.trimCounts(this.stats.urlCounts, 100)
+    }
+
+    // IP counts (keep only top 100 to save memory)
+    this.stats.ipCounts[entry.ip] = (this.stats.ipCounts[entry.ip] || 0) + 1
+    if (Object.keys(this.stats.ipCounts).length > 1000) {
+      this.trimCounts(this.stats.ipCounts, 100)
+    }
+  }
+
+  trimCounts(countsObj, keepTop) {
+    const sorted = Object.entries(countsObj)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, keepTop)
+
+    // Clear and rebuild with top entries only
+    Object.keys(countsObj).forEach((key) => delete countsObj[key])
+    sorted.forEach(([key, value]) => (countsObj[key] = value))
+  }
+
+  updateProgress(percentage) {
+    const progressBar = document.getElementById("progressBar")
+    if (progressBar) {
+      progressBar.style.width = `${percentage}%`
+    }
   }
 
   detectBot(userAgent) {
@@ -321,7 +550,7 @@ class LogAnalyzer {
       }
     }
 
-    // Check for generic bot indicators with more patterns
+    // Check for generic bot indicators
     const genericBotPatterns = [
       /bot/i,
       /crawler/i,
@@ -336,10 +565,9 @@ class LogAnalyzer {
 
     for (const pattern of genericBotPatterns) {
       if (pattern.test(userAgent)) {
-        // Try to extract bot name from user agent
         const botNameMatch = userAgent.match(/(\w+bot|\w+spider|\w+crawler)/i)
         const botName = botNameMatch ? botNameMatch[1] : "Unknown Bot"
-      
+
         return {
           isBot: true,
           name: botName,
@@ -357,120 +585,85 @@ class LogAnalyzer {
     }
   }
 
-  displayResults() {
+  async displayResults() {
     // Destroy existing charts before creating new ones
     this.destroyExistingCharts()
 
     // Setup date range controls
     this.setupDateRange()
 
-    this.calculateStatistics()
-    this.calculateBotStatistics()
-    this.createDetailedBotAnalysis()
+    // Display statistics
+    this.displayStatistics()
+    this.displayBotStatistics()
+    this.displayBotAnalysis()
+
+    // Create visualizations
     this.createCharts()
     this.createBotCharts()
     this.createTables()
     this.createBotTable()
+
     document.getElementById("results").classList.remove("hidden")
   }
 
-  calculateStatistics() {
-    const data = this.filteredLogData.length > 0 ? this.filteredLogData : this.logData
-    const uniqueUrls = new Set(data.map((entry) => entry.url))
-    const uniqueIps = new Set(data.map((entry) => entry.ip))
-
-    // Calculate date range
-    const dates = data.map((entry) => entry.timestamp)
-    const minDate = new Date(Math.min(...dates))
-    const maxDate = new Date(Math.max(...dates))
-    const daysDiff = Math.max(1, Math.ceil((maxDate - minDate) / (1000 * 60 * 60 * 24)))
-
-    // Status code counts
-    const statusCodes = data.reduce((acc, entry) => {
-      const statusClass = Math.floor(entry.status / 100)
-      acc[statusClass] = (acc[statusClass] || 0) + 1
-      return acc
-    }, {})
-
-    const totalBytes = data.reduce((sum, entry) => sum + entry.size, 0)
-    const totalEvents = data.length
+  displayStatistics() {
+    const daysDiff =
+      this.stats.minDate && this.stats.maxDate
+        ? Math.max(1, Math.ceil((this.stats.maxDate - this.stats.minDate) / (1000 * 60 * 60 * 24)))
+        : 1
 
     // Update DOM
-    document.getElementById("uniqueUrls").textContent = uniqueUrls.size.toLocaleString()
-    document.getElementById("uniqueUrlsPerDay").textContent = Math.round(uniqueUrls.size / daysDiff)
-    document.getElementById("totalEvents").textContent = totalEvents.toLocaleString()
-    document.getElementById("eventsPerDay").textContent = Math.round(totalEvents / daysDiff).toLocaleString()
-    document.getElementById("totalBytes").textContent = this.formatBytes(totalBytes)
-    document.getElementById("avgBytes").textContent = this.formatBytes(Math.round(totalBytes / totalEvents))
-    document.getElementById("bytesPerDay").textContent = this.formatBytes(Math.round(totalBytes / daysDiff))
-    document.getElementById("successCount").textContent = (statusCodes[2] || 0).toLocaleString()
-    document.getElementById("redirectionCount").textContent = (statusCodes[3] || 0).toLocaleString()
-    document.getElementById("clientErrorCount").textContent = (statusCodes[4] || 0).toLocaleString()
-    document.getElementById("serverErrorCount").textContent = (statusCodes[5] || 0).toLocaleString()
-    document.getElementById("errorCount").textContent = ((statusCodes[4] || 0) + (statusCodes[5] || 0)).toLocaleString()
+    document.getElementById("uniqueUrls").textContent = this.stats.uniqueUrls.size.toLocaleString()
+    document.getElementById("uniqueUrlsPerDay").textContent = Math.round(this.stats.uniqueUrls.size / daysDiff)
+    document.getElementById("totalEvents").textContent = this.stats.totalEntries.toLocaleString()
+    document.getElementById("eventsPerDay").textContent = Math.round(
+      this.stats.totalEntries / daysDiff,
+    ).toLocaleString()
+    document.getElementById("totalBytes").textContent = this.formatBytes(this.stats.totalBytes)
+    document.getElementById("avgBytes").textContent = this.formatBytes(
+      Math.round(this.stats.totalBytes / this.stats.totalEntries),
+    )
+    document.getElementById("bytesPerDay").textContent = this.formatBytes(Math.round(this.stats.totalBytes / daysDiff))
+    document.getElementById("successCount").textContent = (this.stats.statusCodes[2] || 0).toLocaleString()
+    document.getElementById("redirectionCount").textContent = (this.stats.statusCodes[3] || 0).toLocaleString()
+    document.getElementById("clientErrorCount").textContent = (this.stats.statusCodes[4] || 0).toLocaleString()
+    document.getElementById("serverErrorCount").textContent = (this.stats.statusCodes[5] || 0).toLocaleString()
+    document.getElementById("errorCount").textContent = (
+      (this.stats.statusCodes[4] || 0) + (this.stats.statusCodes[5] || 0)
+    ).toLocaleString()
   }
 
-  calculateBotStatistics() {
-    const data = this.filteredLogData.length > 0 ? this.filteredLogData : this.logData
-    const botRequests = data.filter((entry) => entry.botInfo.isBot)
-    const humanRequests = data.filter((entry) => !entry.botInfo.isBot)
-    const totalRequests = data.length
-
-    const uniqueBots = new Set(botRequests.map((entry) => entry.botInfo.name)).size
-
+  displayBotStatistics() {
     // Update DOM
-    document.getElementById("totalBotRequests").textContent = botRequests.length.toLocaleString()
+    document.getElementById("totalBotRequests").textContent = this.stats.botRequests.toLocaleString()
     document.getElementById("botTrafficPercentage").textContent =
-      totalRequests > 0 ? ((botRequests.length / totalRequests) * 100).toFixed(1) + "%" : "0%"
-    document.getElementById("uniqueBots").textContent = uniqueBots.toLocaleString()
+      this.stats.totalEntries > 0 ? ((this.stats.botRequests / this.stats.totalEntries) * 100).toFixed(1) + "%" : "0%"
+    document.getElementById("uniqueBots").textContent = this.stats.uniqueBots.size.toLocaleString()
     document.getElementById("humanTrafficPercentage").textContent =
-      totalRequests > 0 ? ((humanRequests.length / totalRequests) * 100).toFixed(1) + "%" : "0%"
+      this.stats.totalEntries > 0 ? ((this.stats.humanRequests / this.stats.totalEntries) * 100).toFixed(1) + "%" : "0%"
   }
 
-  createDetailedBotAnalysis() {
-    const data = this.filteredLogData.length > 0 ? this.filteredLogData : this.logData
-    const botRequests = data.filter((entry) => entry.botInfo.isBot)
-    const totalRequests = data.length
-
-    // Group bots by type and count requests
-    const botsByType = {}
-    const botStats = {}
-
-    botRequests.forEach((entry) => {
-      const { name, type, company } = entry.botInfo
-
-      if (!botsByType[type]) {
-        botsByType[type] = 0
-      }
-      botsByType[type]++
-
-      if (!botStats[name]) {
-        botStats[name] = {
-          name,
-          type,
-          company,
-          count: 0,
-        }
-      }
-      botStats[name].count++
-    })
-
+  displayBotAnalysis() {
     // Update category counts
-    document.getElementById("seoBotsCount").textContent = `${(botsByType.seo || 0).toLocaleString()} requests`
-    document.getElementById("aiBotsCount").textContent = `${(botsByType.ai || 0).toLocaleString()} requests`
-    document.getElementById("socialBotsCount").textContent = `${(botsByType.social || 0).toLocaleString()} requests`
+    document.getElementById("seoBotsCount").textContent =
+      `${(this.stats.botsByType.seo || 0).toLocaleString()} requests`
+    document.getElementById("aiBotsCount").textContent = `${(this.stats.botsByType.ai || 0).toLocaleString()} requests`
+    document.getElementById("socialBotsCount").textContent =
+      `${(this.stats.botsByType.social || 0).toLocaleString()} requests`
     document.getElementById("monitoringBotsCount").textContent =
-      `${(botsByType.monitoring || 0).toLocaleString()} requests`
-    document.getElementById("securityBotsCount").textContent = `${(botsByType.security || 0).toLocaleString()} requests`
-    document.getElementById("otherBotsCount").textContent = `${(botsByType.other || 0).toLocaleString()} requests`
+      `${(this.stats.botsByType.monitoring || 0).toLocaleString()} requests`
+    document.getElementById("securityBotsCount").textContent =
+      `${(this.stats.botsByType.security || 0).toLocaleString()} requests`
+    document.getElementById("otherBotsCount").textContent =
+      `${(this.stats.botsByType.other || 0).toLocaleString()} requests`
 
     // Populate bot lists for each category
-    this.populateBotList("seo", botStats, totalRequests)
-    this.populateBotList("ai", botStats, totalRequests)
-    this.populateBotList("social", botStats, totalRequests)
-    this.populateBotList("monitoring", botStats, totalRequests)
-    this.populateBotList("security", botStats, totalRequests)
-    this.populateBotList("other", botStats, totalRequests)
+    this.populateBotList("seo", this.stats.botStats, this.stats.totalEntries)
+    this.populateBotList("ai", this.stats.botStats, this.stats.totalEntries)
+    this.populateBotList("social", this.stats.botStats, this.stats.totalEntries)
+    this.populateBotList("monitoring", this.stats.botStats, this.stats.totalEntries)
+    this.populateBotList("security", this.stats.botStats, this.stats.totalEntries)
+    this.populateBotList("other", this.stats.botStats, this.stats.totalEntries)
   }
 
   populateBotList(type, botStats, totalRequests) {
@@ -530,22 +723,19 @@ class LogAnalyzer {
 
   createBotActivityChart() {
     const ctx = document.getElementById("botActivityChart").getContext("2d")
-    const data = this.filteredLogData.length > 0 ? this.filteredLogData : this.logData
-
-    const dailyData = this.groupByDate(data)
-    const dates = Object.keys(dailyData).sort()
+    const dates = Object.keys(this.stats.dailyData).sort()
 
     const datasets = [
       {
         label: "Human Traffic",
-        data: dates.map((date) => dailyData[date].filter((entry) => !entry.botInfo.isBot).length),
+        data: dates.map((date) => this.stats.dailyData[date].humans),
         borderColor: "#27ae60",
         backgroundColor: "rgba(39, 174, 96, 0.1)",
         tension: 0.4,
       },
       {
         label: "Bot Traffic",
-        data: dates.map((date) => dailyData[date].filter((entry) => entry.botInfo.isBot).length),
+        data: dates.map((date) => this.stats.dailyData[date].bots),
         borderColor: "#e74c3c",
         backgroundColor: "rgba(231, 76, 60, 0.1)",
         tension: 0.4,
@@ -577,16 +767,9 @@ class LogAnalyzer {
 
   createBotDistributionChart() {
     const ctx = document.getElementById("botDistributionChart").getContext("2d")
-    const data = this.filteredLogData.length > 0 ? this.filteredLogData : this.logData
 
-    const botRequests = data.filter((entry) => entry.botInfo.isBot)
-    const botCounts = botRequests.reduce((acc, entry) => {
-      acc[entry.botInfo.name] = (acc[entry.botInfo.name] || 0) + 1
-      return acc
-    }, {})
-
-    const topBots = Object.entries(botCounts)
-      .sort(([, a], [, b]) => b - a)
+    const topBots = Object.entries(this.stats.botStats)
+      .sort(([, a], [, b]) => b.count - a.count)
       .slice(0, 10)
 
     const colors = [
@@ -608,7 +791,7 @@ class LogAnalyzer {
         labels: topBots.map(([name]) => name),
         datasets: [
           {
-            data: topBots.map(([, count]) => count),
+            data: topBots.map(([, bot]) => bot.count),
             backgroundColor: colors,
             borderWidth: 2,
             borderColor: "#fff",
@@ -629,37 +812,33 @@ class LogAnalyzer {
 
   createResponseCodesChart() {
     const ctx = document.getElementById("responseCodesChart").getContext("2d")
-    const data = this.filteredLogData.length > 0 ? this.filteredLogData : this.logData
-
-    // Group data by date and status code
-    const dailyData = this.groupByDate(data)
-    const dates = Object.keys(dailyData).sort()
+    const dates = Object.keys(this.stats.dailyData).sort()
 
     const datasets = [
       {
         label: "Success (2xx)",
-        data: dates.map((date) => dailyData[date].filter((entry) => Math.floor(entry.status / 100) === 2).length),
+        data: dates.map((date) => this.stats.dailyData[date].statusCodes[2] || 0),
         borderColor: "#27ae60",
         backgroundColor: "rgba(39, 174, 96, 0.1)",
         tension: 0.4,
       },
       {
         label: "Redirection (3xx)",
-        data: dates.map((date) => dailyData[date].filter((entry) => Math.floor(entry.status / 100) === 3).length),
+        data: dates.map((date) => this.stats.dailyData[date].statusCodes[3] || 0),
         borderColor: "#f39c12",
         backgroundColor: "rgba(243, 156, 18, 0.1)",
         tension: 0.4,
       },
       {
         label: "Client Error (4xx)",
-        data: dates.map((date) => dailyData[date].filter((entry) => Math.floor(entry.status / 100) === 4).length),
+        data: dates.map((date) => this.stats.dailyData[date].statusCodes[4] || 0),
         borderColor: "#e74c3c",
         backgroundColor: "rgba(231, 76, 60, 0.1)",
         tension: 0.4,
       },
       {
         label: "Server Error (5xx)",
-        data: dates.map((date) => dailyData[date].filter((entry) => Math.floor(entry.status / 100) === 5).length),
+        data: dates.map((date) => this.stats.dailyData[date].statusCodes[5] || 0),
         borderColor: "#8e44ad",
         backgroundColor: "rgba(142, 68, 173, 0.1)",
         tension: 0.4,
@@ -691,10 +870,7 @@ class LogAnalyzer {
 
   createEventsChart() {
     const ctx = document.getElementById("eventsChart").getContext("2d")
-    const data = this.filteredLogData.length > 0 ? this.filteredLogData : this.logData
-
-    const dailyData = this.groupByDate(data)
-    const dates = Object.keys(dailyData).sort()
+    const dates = Object.keys(this.stats.dailyData).sort()
 
     this.charts.events = new Chart(ctx, {
       type: "line",
@@ -703,7 +879,7 @@ class LogAnalyzer {
         datasets: [
           {
             label: "Total Events",
-            data: dates.map((date) => dailyData[date].length),
+            data: dates.map((date) => this.stats.dailyData[date].total),
             borderColor: "#3498db",
             backgroundColor: "rgba(52, 152, 219, 0.1)",
             tension: 0.4,
@@ -730,15 +906,9 @@ class LogAnalyzer {
 
   createUrlsChart() {
     const ctx = document.getElementById("urlsChart").getContext("2d")
-    const data = this.filteredLogData.length > 0 ? this.filteredLogData : this.logData
 
     // Get top 10 URLs
-    const urlCounts = data.reduce((acc, entry) => {
-      acc[entry.url] = (acc[entry.url] || 0) + 1
-      return acc
-    }, {})
-
-    const topUrls = Object.entries(urlCounts)
+    const topUrls = Object.entries(this.stats.urlCounts)
       .sort(([, a], [, b]) => b - a)
       .slice(0, 10)
 
@@ -784,34 +954,12 @@ class LogAnalyzer {
   }
 
   createBotTable() {
-    const data = this.filteredLogData.length > 0 ? this.filteredLogData : this.logData
-    const botRequests = data.filter((entry) => entry.botInfo.isBot)
-    const botStats = botRequests.reduce((acc, entry) => {
-      const key = entry.botInfo.name
-      if (!acc[key]) {
-        acc[key] = {
-          name: entry.botInfo.name,
-          type: entry.botInfo.type,
-          company: entry.botInfo.company,
-          count: 0,
-          lastSeen: entry.timestamp,
-        }
-      }
-      acc[key].count++
-      if (entry.timestamp > acc[key].lastSeen) {
-        acc[key].lastSeen = entry.timestamp
-      }
-      return acc
-    }, {})
-
-    const sortedBots = Object.values(botStats)
+    const sortedBots = Object.values(this.stats.botStats)
       .sort((a, b) => b.count - a.count)
       .slice(0, 50)
 
     const tbody = document.querySelector("#botDetailsTable tbody")
     tbody.innerHTML = ""
-
-    const total = data.length
 
     sortedBots.forEach((bot) => {
       const row = tbody.insertRow()
@@ -820,71 +968,46 @@ class LogAnalyzer {
         <td><strong>${bot.name}</strong><br><small>${bot.company}</small></td>
         <td><span class="${typeClass}">${bot.type.toUpperCase()}</span></td>
         <td>${bot.count.toLocaleString()}</td>
-        <td class="percentage">${((bot.count / total) * 100).toFixed(2)}%</td>
+        <td class="percentage">${((bot.count / this.stats.totalEntries) * 100).toFixed(2)}%</td>
         <td>${bot.lastSeen.toLocaleDateString()} ${bot.lastSeen.toLocaleTimeString()}</td>
       `
     })
   }
 
   createTopUrlsTable() {
-    const data = this.filteredLogData.length > 0 ? this.filteredLogData : this.logData
-    const urlCounts = data.reduce((acc, entry) => {
-      acc[entry.url] = (acc[entry.url] || 0) + 1
-      return acc
-    }, {})
-
-    const topUrls = Object.entries(urlCounts)
+    const topUrls = Object.entries(this.stats.urlCounts)
       .sort(([, a], [, b]) => b - a)
       .slice(0, 20)
 
     const tbody = document.querySelector("#topUrlsTable tbody")
     tbody.innerHTML = ""
 
-    const total = data.length
-
     topUrls.forEach(([url, count]) => {
       const row = tbody.insertRow()
       row.innerHTML = `
-                <td title="${url}">${url.length > 50 ? url.substring(0, 50) + "..." : url}</td>
-                <td>${count.toLocaleString()}</td>
-                <td class="percentage">${((count / total) * 100).toFixed(2)}%</td>
-            `
+        <td title="${url}">${url.length > 50 ? url.substring(0, 50) + "..." : url}</td>
+        <td>${count.toLocaleString()}</td>
+        <td class="percentage">${((count / this.stats.totalEntries) * 100).toFixed(2)}%</td>
+      `
     })
   }
 
   createTopIpsTable() {
-    const data = this.filteredLogData.length > 0 ? this.filteredLogData : this.logData
-    const ipCounts = data.reduce((acc, entry) => {
-      acc[entry.ip] = (acc[entry.ip] || 0) + 1
-      return acc
-    }, {})
-
-    const topIps = Object.entries(ipCounts)
+    const topIps = Object.entries(this.stats.ipCounts)
       .sort(([, a], [, b]) => b - a)
       .slice(0, 20)
 
     const tbody = document.querySelector("#topIpsTable tbody")
     tbody.innerHTML = ""
 
-    const total = data.length
-
     topIps.forEach(([ip, count]) => {
       const row = tbody.insertRow()
       row.innerHTML = `
-                <td>${ip}</td>
-                <td>${count.toLocaleString()}</td>
-                <td class="percentage">${((count / total) * 100).toFixed(2)}%</td>
-            `
+        <td>${ip}</td>
+        <td>${count.toLocaleString()}</td>
+        <td class="percentage">${((count / this.stats.totalEntries) * 100).toFixed(2)}%</td>
+      `
     })
-  }
-
-  groupByDate(data) {
-    return data.reduce((acc, entry) => {
-      const date = entry.timestamp.toISOString().split("T")[0]
-      if (!acc[date]) acc[date] = []
-      acc[date].push(entry)
-      return acc
-    }, {})
   }
 
   formatDate(date) {
@@ -917,146 +1040,82 @@ class LogAnalyzer {
   }
 
   setupDateRange() {
-    if (this.logData.length === 0) return
-
-    const dates = this.logData.map((entry) => entry.timestamp)
-    const minDate = new Date(Math.min(...dates))
-    const maxDate = new Date(Math.max(...dates))
+    if (!this.stats.minDate || !this.stats.maxDate) return
 
     const startDateInput = document.getElementById("startDate")
     const endDateInput = document.getElementById("endDate")
 
     // Set min and max values for date inputs
-    startDateInput.min = this.formatDateForInput(minDate)
-    startDateInput.max = this.formatDateForInput(maxDate)
-    endDateInput.min = this.formatDateForInput(minDate)
-    endDateInput.max = this.formatDateForInput(maxDate)
+    startDateInput.min = this.formatDateForInput(this.stats.minDate)
+    startDateInput.max = this.formatDateForInput(this.stats.maxDate)
+    endDateInput.min = this.formatDateForInput(this.stats.minDate)
+    endDateInput.max = this.formatDateForInput(this.stats.maxDate)
 
     // Set default values to full range
-    startDateInput.value = this.formatDateForInput(minDate)
-    endDateInput.value = this.formatDateForInput(maxDate)
+    startDateInput.value = this.formatDateForInput(this.stats.minDate)
+    endDateInput.value = this.formatDateForInput(this.stats.maxDate)
 
     // Update info display
-    document.getElementById("totalLogEntries").textContent = `${this.logData.length.toLocaleString()} total entries`
+    document.getElementById("totalLogEntries").textContent = `${this.stats.totalEntries.toLocaleString()} total entries`
     document.getElementById("dateRangeSpan").textContent =
-      `${minDate.toLocaleDateString()} - ${maxDate.toLocaleDateString()}`
-
-    // Show date range section
-    document.getElementById("dateRangeSection").classList.remove("hidden")
+      `${this.stats.minDate.toLocaleDateString()} - ${this.stats.maxDate.toLocaleDateString()}`
 
     // Initialize filtered data with all data
-    this.filteredLogData = [...this.logData]
+    this.filteredLogData = []
   }
 
   formatDateForInput(date) {
     return date.toISOString().split("T")[0]
   }
 
+  // Simplified date filtering - for now just show message
   applyDateFilter() {
-    const startDate = new Date(document.getElementById("startDate").value)
-    const endDate = new Date(document.getElementById("endDate").value)
-
-    // Set end date to end of day
-    endDate.setHours(23, 59, 59, 999)
-
-    if (startDate > endDate) {
-      alert("Start date cannot be after end date")
-      return
-    }
-
-    // Filter data
-    this.filteredLogData = this.logData.filter((entry) => {
-      return entry.timestamp >= startDate && entry.timestamp <= endDate
-    })
-
-    // Update filtered info
-    this.updateFilteredInfo(startDate, endDate)
-
-    // Clear active quick filter buttons
-    document.querySelectorAll(".quick-filter-btn").forEach((btn) => {
-      btn.classList.remove("active")
-    })
-
-    // Refresh displays with filtered data
-    this.refreshDisplayWithFilteredData()
+    alert("Date filtering is temporarily disabled in streaming mode. This feature will be added in the next update.")
   }
 
   applyQuickFilter(days) {
-    const endDate = new Date()
-    const startDate = new Date()
-    startDate.setDate(endDate.getDate() - days + 1)
-    startDate.setHours(0, 0, 0, 0)
-    endDate.setHours(23, 59, 59, 999)
-
-    // Update date inputs
-    document.getElementById("startDate").value = this.formatDateForInput(startDate)
-    document.getElementById("endDate").value = this.formatDateForInput(endDate)
-
-    // Filter data
-    this.filteredLogData = this.logData.filter((entry) => {
-      return entry.timestamp >= startDate && entry.timestamp <= endDate
-    })
-
-    // Update filtered info
-    this.updateFilteredInfo(startDate, endDate)
-
-    // Update active button
-    document.querySelectorAll(".quick-filter-btn").forEach((btn) => {
-      btn.classList.remove("active")
-    })
-    event.target.classList.add("active")
-
-    // Refresh displays with filtered data
-    this.refreshDisplayWithFilteredData()
+    alert("Date filtering is temporarily disabled in streaming mode. This feature will be added in the next update.")
   }
 
   resetDateFilter() {
-    // Reset to full range
-    this.filteredLogData = [...this.logData]
-
-    // Reset date inputs to full range
-    const dates = this.logData.map((entry) => entry.timestamp)
-    const minDate = new Date(Math.min(...dates))
-    const maxDate = new Date(Math.max(...dates))
-
-    document.getElementById("startDate").value = this.formatDateForInput(minDate)
-    document.getElementById("endDate").value = this.formatDateForInput(maxDate)
-
-    // Hide filtered info
-    document.getElementById("filteredInfo").classList.add("hidden")
-
-    // Clear active quick filter buttons
-    document.querySelectorAll(".quick-filter-btn").forEach((btn) => {
-      btn.classList.remove("active")
-    })
-
-    // Refresh displays with all data
-    this.refreshDisplayWithFilteredData()
+    alert("Date filtering is temporarily disabled in streaming mode. This feature will be added in the next update.")
   }
 
-  updateFilteredInfo(startDate, endDate) {
-    const filteredInfo = document.getElementById("filteredInfo")
-    const filteredEntries = document.getElementById("filteredEntries")
-    const filteredDateRange = document.getElementById("filteredDateRange")
+  exportFullReport() {
+    const report = {
+      summary: {
+        totalRequests: this.stats.totalEntries,
+        botTraffic: ((this.stats.botRequests / this.stats.totalEntries) * 100).toFixed(1) + "%",
+        uniqueIPs: Object.keys(this.stats.ipCounts).length,
+        errorRate:
+          (
+            (((this.stats.statusCodes[4] || 0) + (this.stats.statusCodes[5] || 0)) / this.stats.totalEntries) *
+            100
+          ).toFixed(1) + "%",
+        dateRange: {
+          start: this.stats.minDate ? this.stats.minDate.toISOString() : null,
+          end: this.stats.maxDate ? this.stats.maxDate.toISOString() : null,
+        },
+      },
+      botAnalysis: Object.values(this.stats.botStats).sort((a, b) => b.count - a.count),
+      topUrls: Object.entries(this.stats.urlCounts)
+        .sort(([, a], [, b]) => b - a)
+        .slice(0, 20)
+        .map(([url, count]) => ({ url, count })),
+      topIPs: Object.entries(this.stats.ipCounts)
+        .sort(([, a], [, b]) => b - a)
+        .slice(0, 20)
+        .map(([ip, count]) => ({ ip, count })),
+      generatedAt: new Date().toISOString(),
+    }
 
-    filteredEntries.textContent = `${this.filteredLogData.length.toLocaleString()} entries`
-    filteredDateRange.textContent = `${startDate.toLocaleDateString()} - ${endDate.toLocaleDateString()}`
-
-    filteredInfo.classList.remove("hidden")
-  }
-
-  refreshDisplayWithFilteredData() {
-    // Destroy existing charts
-    this.destroyExistingCharts()
-
-    // Recalculate everything with filtered data
-    this.calculateStatistics()
-    this.calculateBotStatistics()
-    this.createDetailedBotAnalysis()
-    this.createCharts()
-    this.createBotCharts()
-    this.createTables()
-    this.createBotTable()
+    const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `access-log-analysis-${new Date().toISOString().split("T")[0]}.json`
+    a.click()
+    URL.revokeObjectURL(url)
   }
 }
 

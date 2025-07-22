@@ -34,13 +34,14 @@ class LogAnalyzer {
       ipCounts: {},
       minDate: null,
       maxDate: null,
+      botUrlHits: {}, // Format: { "url": { "botName": count } }
     };
   }
 
   initializeBotPatterns() {
     return {
       seo: [
-        { name: "Googlebot", pattern: /googlebot/i, company: "Google" },
+        { name: "Googlebot", pattern: /googlebot|^google$/i, company: "Google" },
         { name: "Bingbot", pattern: /bingbot/i, company: "Microsoft" },
         { name: "Slurp", pattern: /slurp/i, company: "Yahoo" },
         { name: "DuckDuckBot", pattern: /duckduckbot/i, company: "DuckDuckGo" },
@@ -73,7 +74,6 @@ class LogAnalyzer {
       ],
       social: [
         { name: "FacebookBot", pattern: /facebookbot/i, company: "Facebook" },
-        { name: "Instagram", pattern: /instagram/i, company: "Instagram" },
         { name: "TelegramBot", pattern: /telegrambot/i, company: "Telegram" },
         { name: "SkypeUriPreview", pattern: /skypeuripreview/i, company: "Skype" },
         { name: "SlackBot", pattern: /slackbot/i, company: "Slack" },
@@ -109,6 +109,9 @@ class LogAnalyzer {
         { name: "DownNotifier", pattern: /downnotifier/i, company: "DownNotifier" },
         { name: "BetterUptime", pattern: /betteruptime|better uptime/i, company: "Better Uptime" },
         { name: "HubSpotPageFetcher", pattern: /hubspotpagefetcher|HubSpot Page Fetcher/i, company: "HubSpot" },
+        { name: "AdsBot Google Mobile", pattern: /adsbot-google-mobile/i, company: "Google" },
+        { name: "AdsBot Google", pattern: /adsbot-google/i, company: "Google" },
+        { name: "Google-Adwords-Instant", pattern: /google-adwords-instant/i, company: "Google" },
       ],
     };
   }
@@ -123,6 +126,11 @@ class LogAnalyzer {
     const applyDateRangeBtn = document.getElementById("applyDateRange");
     const resetDateRangeBtn = document.getElementById("resetDateRange");
     const quickFilterBtns = document.querySelectorAll(".quick-filter-btn");
+    // START: New dropdown event listeners
+    const botUrlFilterDropdown = document.getElementById("botUrlFilterDropdown");
+    const botUrlFilterDisplay = document.getElementById("botUrlFilterDisplay");
+    const botUrlFilterOptions = document.getElementById("botUrlFilterOptions");
+    // END: New dropdown event listeners
 
     fileInput.addEventListener("change", (e) => {
       if (e.target.files.length > 0) this.handleFileSelection(e.target.files[0]);
@@ -164,6 +172,39 @@ class LogAnalyzer {
         this.applyQuickFilter(days);
       });
     });
+
+    // START: New dropdown logic
+    botUrlFilterDisplay.addEventListener("click", () => {
+        botUrlFilterOptions.classList.toggle('visible');
+    });
+
+    botUrlFilterOptions.addEventListener("change", (e) => {
+        if (e.target.type === 'checkbox') {
+            this.updateMultiSelectDisplayText();
+            this.createBotUrlHitsTable(this.currentAnalysis.botUrlHits);
+        }
+    });
+
+    botUrlFilterOptions.addEventListener("click", (e) => {
+        const checkboxes = botUrlFilterOptions.querySelectorAll('input[type="checkbox"]');
+        if (e.target.matches('[data-action="select-all"]')) {
+            checkboxes.forEach(cb => cb.checked = true);
+            this.updateMultiSelectDisplayText();
+            this.createBotUrlHitsTable(this.currentAnalysis.botUrlHits);
+        }
+        if (e.target.matches('[data-action="deselect-all"]')) {
+            checkboxes.forEach(cb => cb.checked = false);
+            this.updateMultiSelectDisplayText();
+            this.createBotUrlHitsTable(this.currentAnalysis.botUrlHits);
+        }
+    });
+
+    window.addEventListener('click', (e) => {
+        if (!botUrlFilterDropdown.contains(e.target)) {
+            botUrlFilterOptions.classList.remove('visible');
+        }
+    });
+    // END: New dropdown logic
   }
 
   handleFileSelection(file) {
@@ -194,6 +235,10 @@ class LogAnalyzer {
     document.getElementById("filteredInfo").classList.add("hidden");
     this.clearFileSelection();
     document.getElementById("progressBar").style.width = "0%";
+    document.getElementById("botUrlFilterCheckboxes").innerHTML = "";
+    document.querySelector("#botUrlHitsTable tbody").innerHTML = "";
+    document.querySelector("#botUrlHitsTable thead").innerHTML = "";
+    this.updateMultiSelectDisplayText();
   }
 
   formatFileSize(bytes) {
@@ -214,12 +259,14 @@ class LogAnalyzer {
     try {
       await this.processFileLineByLine(file);
 
-      // Find the full date range from the parsed data
       const dateKeys = Object.keys(this.dailyStats).sort();
+      if(dateKeys.length === 0) {
+        alert("No valid log entries found. Please check the file format.");
+        return;
+      }
       const minDate = new Date(dateKeys[0]);
       const maxDate = new Date(dateKeys[dateKeys.length - 1]);
 
-      // Perform the initial aggregation for the entire file
       this.fullFileAnalysis = this.aggregateStatsForRange(minDate, maxDate);
       this.currentAnalysis = this.fullFileAnalysis;
 
@@ -289,6 +336,8 @@ class LogAnalyzer {
       const [day, monthStr, year, time] = timestampStr.split(" ");
       const [hour, minute, second] = time.split(":");
       const parsedDate = new Date(Date.UTC(Number.parseInt(year), months[monthStr], Number.parseInt(day), Number.parseInt(hour), Number.parseInt(minute), Number.parseInt(second)));
+      
+      if (isNaN(parsedDate)) return; // Skip if date is invalid
 
       const entry = {
         ip,
@@ -307,19 +356,14 @@ class LogAnalyzer {
     }
   }
 
-  /**
-   * Updates the statistics for a single day based on a log entry.
-   */
   updateDailyStats(entry) {
     const dateKey = entry.timestamp.toISOString().split("T")[0];
 
-    // Initialize the stat block for the day if it doesn't exist
     if (!this.dailyStats[dateKey]) {
       this.dailyStats[dateKey] = this.getNewStatBlock();
     }
     const dayStats = this.dailyStats[dateKey];
 
-    // Update stats for the day
     dayStats.totalEntries++;
     dayStats.totalBytes += entry.size;
     dayStats.uniqueUrls.add(entry.url);
@@ -340,15 +384,16 @@ class LogAnalyzer {
       }
       dayStats.botStats[botInfo.name].count++;
       dayStats.botStats[botInfo.name].lastSeen = entry.timestamp;
+
+      if (!dayStats.botUrlHits[entry.url]) {
+          dayStats.botUrlHits[entry.url] = {};
+      }
+      dayStats.botUrlHits[entry.url][botInfo.name] = (dayStats.botUrlHits[entry.url][botInfo.name] || 0) + 1;
     } else {
       dayStats.humanRequests++;
     }
   }
 
-  /**
-   * Aggregates statistics from the daily data over a specified date range.
-   * This is the core of the filtering logic.
-   */
   aggregateStatsForRange(startDate, endDate) {
     const result = this.getNewStatBlock();
     result.minDate = startDate;
@@ -357,17 +402,15 @@ class LogAnalyzer {
     const dateKeys = Object.keys(this.dailyStats).sort();
 
     for (const dateKey of dateKeys) {
-      const dayDate = new Date(dateKey + 'T00:00:00.000Z'); // Ensure UTC comparison
+      const dayDate = new Date(dateKey + 'T00:00:00.000Z');
       if (dayDate >= startDate && dayDate <= endDate) {
         const dayStats = this.dailyStats[dateKey];
 
-        // Aggregate simple numeric stats
         result.totalEntries += dayStats.totalEntries;
         result.totalBytes += dayStats.totalBytes;
         result.botRequests += dayStats.botRequests;
         result.humanRequests += dayStats.humanRequests;
 
-        // Merge maps/objects by summing counts
         for (const [code, count] of Object.entries(dayStats.statusCodes)) {
           result.statusCodes[code] = (result.statusCodes[code] || 0) + count;
         }
@@ -381,11 +424,9 @@ class LogAnalyzer {
           result.botsByType[type] = (result.botsByType[type] || 0) + count;
         }
 
-        // Merge Sets
         dayStats.uniqueUrls.forEach(url => result.uniqueUrls.add(url));
         dayStats.uniqueBots.forEach(botName => result.uniqueBots.add(botName));
 
-        // Merge detailed bot stats
         for (const [botName, botData] of Object.entries(dayStats.botStats)) {
           if (!result.botStats[botName]) {
             result.botStats[botName] = { ...botData };
@@ -395,6 +436,14 @@ class LogAnalyzer {
               result.botStats[botName].lastSeen = botData.lastSeen;
             }
           }
+        }
+        for (const [url, bots] of Object.entries(dayStats.botUrlHits)) {
+            if (!result.botUrlHits[url]) {
+                result.botUrlHits[url] = {};
+            }
+            for (const [botName, count] of Object.entries(bots)) {
+                result.botUrlHits[url][botName] = (result.botUrlHits[url][botName] || 0) + count;
+            }
         }
       }
     }
@@ -425,14 +474,12 @@ class LogAnalyzer {
     return { isBot: false, name: null, type: null, company: null };
   }
 
-  /**
-   * Renders all UI components based on the provided analysis data.
-   */
   displayResults(analysisData) {
     this.destroyExistingCharts();
     this.displayStatistics(analysisData);
     this.displayBotAnalysis(analysisData);
     this.createAllCharts(analysisData);
+    this.populateBotFilterControls(analysisData.botStats);
     this.createAllTables(analysisData);
     document.getElementById("results").classList.remove("hidden");
   }
@@ -589,6 +636,7 @@ class LogAnalyzer {
     this.createTopUrlsTable(data.urlCounts, data.totalEntries);
     this.createTopIpsTable(data.ipCounts, data.totalEntries);
     this.createBotTable(data.botStats, data.totalEntries);
+    this.createBotUrlHitsTable(data.botUrlHits);
   }
 
   createTopUrlsTable(urlCounts, totalEntries) {
@@ -634,6 +682,124 @@ class LogAnalyzer {
         <td>${new Date(bot.lastSeen).toLocaleString()}</td>`;
     });
   }
+
+  // START: Modified methods for bot URL hits table and dropdown
+  updateMultiSelectDisplayText() {
+      const display = document.getElementById('botUrlFilterDisplay');
+      const checkboxContainer = document.getElementById('botUrlFilterCheckboxes');
+      if (!checkboxContainer) return;
+
+      const selectedCount = checkboxContainer.querySelectorAll('input:checked').length;
+      const totalCount = checkboxContainer.querySelectorAll('input').length;
+
+      if (totalCount === 0) {
+          display.textContent = 'No bots detected';
+      } else if (selectedCount === 0) {
+          display.textContent = 'Select Bots';
+      } else if (selectedCount === totalCount) {
+          display.textContent = 'All bots selected';
+      } else {
+          display.textContent = `${selectedCount} of ${totalCount} bots selected`;
+      }
+  }
+
+  populateBotFilterControls(botStats) {
+      const container = document.getElementById("botUrlFilterCheckboxes");
+      container.innerHTML = "";
+      const sortedBots = Object.values(botStats).sort((a, b) => b.count - a.count);
+
+      if (sortedBots.length === 0) {
+          this.updateMultiSelectDisplayText();
+          return;
+      }
+      
+      const top10Bots = sortedBots.slice(0, 10).map(b => b.name);
+
+      sortedBots.forEach(bot => {
+          const label = document.createElement('label');
+          const checkbox = document.createElement('input');
+          checkbox.type = 'checkbox';
+          checkbox.value = bot.name;
+          checkbox.checked = top10Bots.includes(bot.name);
+          label.appendChild(checkbox);
+          label.appendChild(document.createTextNode(bot.name));
+          container.appendChild(label);
+      });
+      this.updateMultiSelectDisplayText();
+  }
+
+  createBotUrlHitsTable(botUrlHits) {
+      const thead = document.querySelector("#botUrlHitsTable thead");
+      const tbody = document.querySelector("#botUrlHitsTable tbody");
+      thead.innerHTML = "";
+      tbody.innerHTML = "";
+      
+      const selectedBots = Array.from(document.querySelectorAll('#botUrlFilterCheckboxes input:checked')).map(cb => cb.value);
+
+      // This is the key logic change
+      if (selectedBots.length === 0) {
+          const row = tbody.insertRow();
+          row.className = 'table-placeholder';
+          const cell = row.insertCell();
+          cell.colSpan = 1; // It will expand anyway
+          cell.textContent = 'Select one or more bots to display data.';
+          return;
+      }
+
+      const headerRow = thead.insertRow();
+      headerRow.innerHTML = `<th>URL</th>`;
+      selectedBots.forEach(botName => {
+          headerRow.innerHTML += `<th>${botName}</th>`;
+      });
+      headerRow.innerHTML += `<th>Total</th>`;
+
+      let dataForTable = [];
+      for (const [url, hitsByBot] of Object.entries(botUrlHits)) {
+          let totalHitsForSelectedBots = 0;
+          let hasHitsFromSelected = false;
+          const botCounts = {};
+
+          for(const botName of selectedBots) {
+              const count = hitsByBot[botName] || 0;
+              if (count > 0) {
+                  hasHitsFromSelected = true;
+                  totalHitsForSelectedBots += count;
+                  botCounts[botName] = count;
+              }
+          }
+
+          if(hasHitsFromSelected) {
+              dataForTable.push({
+                  url,
+                  totalHits: totalHitsForSelectedBots,
+                  botCounts
+              });
+          }
+      }
+
+      dataForTable.sort((a,b) => b.totalHits - a.totalHits);
+      const top100 = dataForTable.slice(0, 100);
+
+      if (top100.length === 0) {
+        const row = tbody.insertRow();
+        row.className = 'table-placeholder';
+        const cell = row.insertCell();
+        cell.colSpan = selectedBots.length + 2;
+        cell.textContent = 'No hits found for the selected bots in this period.';
+        return;
+      }
+
+      top100.forEach(rowData => {
+          const row = tbody.insertRow();
+          row.innerHTML = `<td title="${rowData.url}">${rowData.url.length > 70 ? `${rowData.url.substring(0, 70)}...` : rowData.url}</td>`;
+          
+          selectedBots.forEach(botName => {
+              row.innerHTML += `<td>${(rowData.botCounts[botName] || 0).toLocaleString()}</td>`;
+          });
+          row.innerHTML += `<td><strong>${rowData.totalHits.toLocaleString()}</strong></td>`;
+      });
+  }
+  // END: Modified methods
 
   formatBytes(bytes) {
     if (bytes === 0) return "0 B";

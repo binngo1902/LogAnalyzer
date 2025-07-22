@@ -350,6 +350,34 @@
                         </table>
                     </div>
                 </div>
+                <!-- START: Modified Bot URL Hits Table -->
+               <div class="interactive-table-card full-width">
+    <div class="chart-header">
+        <h3>Bot Hits per URL</h3>
+        <button class="export-btn" data-table="bot-url-hits">Export CSV</button>
+    </div>
+    <div class="bot-filter-controls">
+        <div class="multiselect-dropdown" id="botUrlFilterDropdown">
+            <div class="multiselect-display" id="botUrlFilterDisplay">Select Bots</div>
+            <div class="multiselect-options" id="botUrlFilterOptions">
+                <div class="multiselect-actions">
+                    <button class="filter-action-btn" data-action="select-all">Select All</button>
+                    <button class="filter-action-btn" data-action="deselect-all">Deselect All</button>
+                </div>
+                <div class="multiselect-checkboxes" id="botUrlFilterCheckboxes">
+                    <!-- Checkboxes will be populated here -->
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="table-wrapper">
+        <table id="botUrlHitsTable">
+            <thead></thead>
+            <tbody></tbody>
+        </table>
+    </div>
+</div>
+                <!-- END: Modified Bot URL Hits Table -->
             </div>
         </div>
     </div>

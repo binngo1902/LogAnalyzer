@@ -378,6 +378,32 @@
     </div>
 </div>
                 <!-- END: Modified Bot URL Hits Table -->
+                  <div class="interactive-table-card full-width">
+                    <div class="chart-header">
+                        <h3>Human Traffic Sources</h3>
+                        <button class="export-btn" data-table="traffic-sources">Export CSV</button>
+                    </div>
+                    <div class="bot-filter-controls">
+                        <div class="multiselect-dropdown" id="referrerFilterDropdown">
+                            <div class="multiselect-display" id="referrerFilterDisplay">Select Referrers</div>
+                            <div class="multiselect-options" id="referrerFilterOptions">
+                                <div class="multiselect-actions">
+                                    <button class="filter-action-btn" data-action="select-all">Select All</button>
+                                    <button class="filter-action-btn" data-action="deselect-all">Deselect All</button>
+                                </div>
+                                <div class="multiselect-checkboxes" id="referrerFilterCheckboxes">
+                                    <!-- Referrer checkboxes will be populated here -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="table-wrapper">
+                        <table id="trafficSourceTable">
+                            <thead></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
         </div>
     </div>

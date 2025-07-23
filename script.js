@@ -1,24 +1,13 @@
 class LogAnalyzer {
   constructor() {
-    // This will hold the detailed stats for each day after parsing the file.
-    // e.g., { "2023-10-27": { stats for this day }, "2023-10-28": { ... } }
     this.dailyStats = {};
-
-    // This will hold the aggregated analysis for the currently displayed range.
     this.currentAnalysis = null;
-
-    // This will store the analysis for the *entire* log file to easily reset filters.
     this.fullFileAnalysis = null;
-
     this.charts = {};
     this.botPatterns = this.initializeBotPatterns();
     this.initializeEventListeners();
   }
 
-  /**
-   * Creates a fresh, zeroed-out statistics object.
-   * Used for initializing daily stats and aggregate results.
-   */
   getNewStatBlock() {
     return {
       totalEntries: 0,
@@ -34,7 +23,8 @@ class LogAnalyzer {
       ipCounts: {},
       minDate: null,
       maxDate: null,
-      botUrlHits: {}, // Format: { "url": { "botName": count } }
+      botUrlHits: {},
+      humanReferrers: {}, 
     };
   }
 
@@ -116,7 +106,9 @@ class LogAnalyzer {
     };
   }
 
+  // REWORKED: All event listeners are now properly scoped.
   initializeEventListeners() {
+    // --- Get all DOM elements first ---
     const fileInput = document.getElementById("logFile");
     const analyzeBtn = document.getElementById("analyzeBtn");
     const dropbox = document.getElementById("dropbox");
@@ -126,12 +118,18 @@ class LogAnalyzer {
     const applyDateRangeBtn = document.getElementById("applyDateRange");
     const resetDateRangeBtn = document.getElementById("resetDateRange");
     const quickFilterBtns = document.querySelectorAll(".quick-filter-btn");
-    // START: New dropdown event listeners
+
+    // Bot filter elements
     const botUrlFilterDropdown = document.getElementById("botUrlFilterDropdown");
     const botUrlFilterDisplay = document.getElementById("botUrlFilterDisplay");
     const botUrlFilterOptions = document.getElementById("botUrlFilterOptions");
-    // END: New dropdown event listeners
 
+    // Referrer filter elements
+    const referrerFilterDropdown = document.getElementById("referrerFilterDropdown");
+    const referrerFilterDisplay = document.getElementById("referrerFilterDisplay");
+    const referrerFilterOptions = document.getElementById("referrerFilterOptions");
+
+    // --- Attach event listeners ---
     fileInput.addEventListener("change", (e) => {
       if (e.target.files.length > 0) this.handleFileSelection(e.target.files[0]);
     });
@@ -173,38 +171,43 @@ class LogAnalyzer {
       });
     });
 
-    // START: New dropdown logic
-    botUrlFilterDisplay.addEventListener("click", () => {
-        botUrlFilterOptions.classList.toggle('visible');
-    });
-
-    botUrlFilterOptions.addEventListener("change", (e) => {
-        if (e.target.type === 'checkbox') {
-            this.updateMultiSelectDisplayText();
-            this.createBotUrlHitsTable(this.currentAnalysis.botUrlHits);
-        }
-    });
-
+    // --- Dropdown Logic ---
+    // Bot Dropdown
+    botUrlFilterDisplay.addEventListener("click", () => botUrlFilterOptions.classList.toggle('visible'));
     botUrlFilterOptions.addEventListener("click", (e) => {
-        const checkboxes = botUrlFilterOptions.querySelectorAll('input[type="checkbox"]');
         if (e.target.matches('[data-action="select-all"]')) {
-            checkboxes.forEach(cb => cb.checked = true);
-            this.updateMultiSelectDisplayText();
-            this.createBotUrlHitsTable(this.currentAnalysis.botUrlHits);
+            botUrlFilterOptions.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = true);
         }
         if (e.target.matches('[data-action="deselect-all"]')) {
-            checkboxes.forEach(cb => cb.checked = false);
-            this.updateMultiSelectDisplayText();
-            this.createBotUrlHitsTable(this.currentAnalysis.botUrlHits);
+            botUrlFilterOptions.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false);
         }
+        // Update table regardless of what was clicked inside
+        this.updateMultiSelectDisplayText('bot');
+        this.createBotUrlHitsTable(this.currentAnalysis.botUrlHits);
     });
 
+    // Referrer Dropdown
+    referrerFilterDisplay.addEventListener("click", () => referrerFilterOptions.classList.toggle('visible'));
+    referrerFilterOptions.addEventListener("click", (e) => {
+        if (e.target.matches('[data-action="select-all"]')) {
+            referrerFilterOptions.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = true);
+        }
+        if (e.target.matches('[data-action="deselect-all"]')) {
+            referrerFilterOptions.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false);
+        }
+        this.updateMultiSelectDisplayText('referrer');
+        this.createTrafficSourceTable(this.currentAnalysis.humanReferrers);
+    });
+    
+    // Global click listener to close dropdowns
     window.addEventListener('click', (e) => {
         if (!botUrlFilterDropdown.contains(e.target)) {
             botUrlFilterOptions.classList.remove('visible');
         }
+        if (!referrerFilterDropdown.contains(e.target)) {
+            referrerFilterOptions.classList.remove('visible');
+        }
     });
-    // END: New dropdown logic
   }
 
   handleFileSelection(file) {
@@ -212,7 +215,6 @@ class LogAnalyzer {
     document.getElementById("fileInfo").classList.remove("hidden");
     document.getElementById("fileName").textContent = file.name;
     document.getElementById("fileSize").textContent = this.formatFileSize(file.size);
-
     const fileSizeMB = file.size / (1024 * 1024);
     document.getElementById("fileSizeWarning").classList.toggle("hidden", fileSizeMB <= 25);
     document.getElementById("analyzeBtn").disabled = false;
@@ -235,10 +237,18 @@ class LogAnalyzer {
     document.getElementById("filteredInfo").classList.add("hidden");
     this.clearFileSelection();
     document.getElementById("progressBar").style.width = "0%";
+    
+    // Clear bot table
     document.getElementById("botUrlFilterCheckboxes").innerHTML = "";
     document.querySelector("#botUrlHitsTable tbody").innerHTML = "";
     document.querySelector("#botUrlHitsTable thead").innerHTML = "";
-    this.updateMultiSelectDisplayText();
+    this.updateMultiSelectDisplayText('bot');
+
+    // Clear referrer table
+    document.getElementById("referrerFilterCheckboxes").innerHTML = "";
+    document.querySelector("#trafficSourceTable tbody").innerHTML = "";
+    document.querySelector("#trafficSourceTable thead").innerHTML = "";
+    this.updateMultiSelectDisplayText('referrer');
   }
 
   formatFileSize(bytes) {
@@ -252,13 +262,10 @@ class LogAnalyzer {
   async analyzeLogFile() {
     const file = document.getElementById("logFile").files[0];
     if (!file) return;
-
     this.showLoading(true);
-    this.dailyStats = {}; // Reset data for new analysis
-
+    this.dailyStats = {};
     try {
       await this.processFileLineByLine(file);
-
       const dateKeys = Object.keys(this.dailyStats).sort();
       if(dateKeys.length === 0) {
         alert("No valid log entries found. Please check the file format.");
@@ -266,18 +273,14 @@ class LogAnalyzer {
       }
       const minDate = new Date(dateKeys[0]);
       const maxDate = new Date(dateKeys[dateKeys.length - 1]);
-
       this.fullFileAnalysis = this.aggregateStatsForRange(minDate, maxDate);
       this.currentAnalysis = this.fullFileAnalysis;
-
       document.getElementById("loadingStatus").textContent = "Generating analysis...";
       this.updateProgress(90);
       await new Promise((resolve) => setTimeout(resolve, 100));
-
       this.setupDateRangeControls(minDate, maxDate);
       this.displayResults(this.currentAnalysis);
       this.updateProgress(100);
-
     } catch (error) {
       console.error("Error analyzing log file:", error);
       alert(`Error analyzing log file: ${error.message}.`);
@@ -292,7 +295,6 @@ class LogAnalyzer {
     let buffer = "";
     let processedLines = 0;
     const logRegex = /^(\S+) \S+ \S+ \[([^\]]+)\] "(\S+) ([^"]*) HTTP\/[\d.]+" (\d+) (\d+|-) "([^"]*)" "([^"]*)"/;
-
     while (offset < file.size) {
       const chunk = file.slice(offset, offset + chunkSize);
       const text = await new Promise((resolve, reject) => {
@@ -303,10 +305,8 @@ class LogAnalyzer {
       });
       buffer += text;
       offset += chunkSize;
-
       const lines = buffer.split("\n");
       buffer = lines.pop() || "";
-
       for (const line of lines) {
         if (line.trim()) {
           this.processLogLine(line.trim(), logRegex);
@@ -327,70 +327,63 @@ class LogAnalyzer {
   processLogLine(line, logRegex) {
     const match = logRegex.exec(line);
     if (!match) return;
-
     const [, ip, timestamp, method, url, status, size, referer, userAgent] = match;
-
     try {
       const timestampStr = timestamp.replace(/(\d{2})\/(\w{3})\/(\d{4}):(\d{2}):(\d{2}):(\d{2}) ([+-]\d{4})/, "$1 $2 $3 $4:$5:$6");
       const months = { Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5, Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11 };
       const [day, monthStr, year, time] = timestampStr.split(" ");
       const [hour, minute, second] = time.split(":");
       const parsedDate = new Date(Date.UTC(Number.parseInt(year), months[monthStr], Number.parseInt(day), Number.parseInt(hour), Number.parseInt(minute), Number.parseInt(second)));
-      
-      if (isNaN(parsedDate)) return; // Skip if date is invalid
-
-      const entry = {
-        ip,
-        timestamp: parsedDate,
-        method,
-        url: url || "/",
-        status: Number.parseInt(status),
-        size: size === "-" ? 0 : Number.parseInt(size),
-        referer,
-        userAgent,
-      };
+      if (isNaN(parsedDate)) return;
+      const entry = { ip, timestamp: parsedDate, method, url: url || "/", status: Number.parseInt(status), size: size === "-" ? 0 : Number.parseInt(size), referer, userAgent };
       this.updateDailyStats(entry);
-
     } catch (error) {
       // Ignore lines with invalid dates
     }
   }
 
+  // REFINED LOGIC: Cleaner way to parse and store referrers.
   updateDailyStats(entry) {
     const dateKey = entry.timestamp.toISOString().split("T")[0];
-
     if (!this.dailyStats[dateKey]) {
       this.dailyStats[dateKey] = this.getNewStatBlock();
     }
     const dayStats = this.dailyStats[dateKey];
-
     dayStats.totalEntries++;
     dayStats.totalBytes += entry.size;
     dayStats.uniqueUrls.add(entry.url);
     dayStats.urlCounts[entry.url] = (dayStats.urlCounts[entry.url] || 0) + 1;
     dayStats.ipCounts[entry.ip] = (dayStats.ipCounts[entry.ip] || 0) + 1;
-
     const statusClass = Math.floor(entry.status / 100);
     dayStats.statusCodes[statusClass] = (dayStats.statusCodes[statusClass] || 0) + 1;
-
     const botInfo = this.detectBot(entry.userAgent);
     if (botInfo.isBot) {
       dayStats.botRequests++;
       dayStats.uniqueBots.add(botInfo.name);
       dayStats.botsByType[botInfo.type] = (dayStats.botsByType[botInfo.type] || 0) + 1;
-
       if (!dayStats.botStats[botInfo.name]) {
         dayStats.botStats[botInfo.name] = { ...botInfo, count: 0, lastSeen: entry.timestamp };
       }
       dayStats.botStats[botInfo.name].count++;
       dayStats.botStats[botInfo.name].lastSeen = entry.timestamp;
-
       if (!dayStats.botUrlHits[entry.url]) {
           dayStats.botUrlHits[entry.url] = {};
       }
       dayStats.botUrlHits[entry.url][botInfo.name] = (dayStats.botUrlHits[entry.url][botInfo.name] || 0) + 1;
     } else {
       dayStats.humanRequests++;
+      let referrerDomain = 'Direct/Internal';
+      // Only parse valid, external http/https referrers
+      if (entry.referer && entry.referer.startsWith('http')) {
+          try {
+              const referrerUrl = new URL(entry.referer);
+              referrerDomain = referrerUrl.hostname;
+          } catch (e) { /* Ignore invalid URLs */ }
+      }
+      if (!dayStats.humanReferrers[entry.url]) {
+          dayStats.humanReferrers[entry.url] = {};
+      }
+      dayStats.humanReferrers[entry.url][referrerDomain] = (dayStats.humanReferrers[entry.url][referrerDomain] || 0) + 1;
     }
   }
 
@@ -398,19 +391,15 @@ class LogAnalyzer {
     const result = this.getNewStatBlock();
     result.minDate = startDate;
     result.maxDate = endDate;
-
     const dateKeys = Object.keys(this.dailyStats).sort();
-
     for (const dateKey of dateKeys) {
       const dayDate = new Date(dateKey + 'T00:00:00.000Z');
       if (dayDate >= startDate && dayDate <= endDate) {
         const dayStats = this.dailyStats[dateKey];
-
         result.totalEntries += dayStats.totalEntries;
         result.totalBytes += dayStats.totalBytes;
         result.botRequests += dayStats.botRequests;
         result.humanRequests += dayStats.humanRequests;
-
         for (const [code, count] of Object.entries(dayStats.statusCodes)) {
           result.statusCodes[code] = (result.statusCodes[code] || 0) + count;
         }
@@ -423,10 +412,8 @@ class LogAnalyzer {
         for (const [type, count] of Object.entries(dayStats.botsByType)) {
           result.botsByType[type] = (result.botsByType[type] || 0) + count;
         }
-
         dayStats.uniqueUrls.forEach(url => result.uniqueUrls.add(url));
         dayStats.uniqueBots.forEach(botName => result.uniqueBots.add(botName));
-
         for (const [botName, botData] of Object.entries(dayStats.botStats)) {
           if (!result.botStats[botName]) {
             result.botStats[botName] = { ...botData };
@@ -438,11 +425,15 @@ class LogAnalyzer {
           }
         }
         for (const [url, bots] of Object.entries(dayStats.botUrlHits)) {
-            if (!result.botUrlHits[url]) {
-                result.botUrlHits[url] = {};
-            }
+            if (!result.botUrlHits[url]) result.botUrlHits[url] = {};
             for (const [botName, count] of Object.entries(bots)) {
                 result.botUrlHits[url][botName] = (result.botUrlHits[url][botName] || 0) + count;
+            }
+        }
+        for (const [url, referrers] of Object.entries(dayStats.humanReferrers)) {
+            if (!result.humanReferrers[url]) result.humanReferrers[url] = {};
+            for (const [referrer, count] of Object.entries(referrers)) {
+                result.humanReferrers[url][referrer] = (result.humanReferrers[url][referrer] || 0) + count;
             }
         }
       }
@@ -480,6 +471,7 @@ class LogAnalyzer {
     this.displayBotAnalysis(analysisData);
     this.createAllCharts(analysisData);
     this.populateBotFilterControls(analysisData.botStats);
+    this.populateReferrerFilterControls(analysisData.humanReferrers);
     this.createAllTables(analysisData);
     document.getElementById("results").classList.remove("hidden");
   }
@@ -498,8 +490,6 @@ class LogAnalyzer {
     document.getElementById("clientErrorCount").textContent = (data.statusCodes[4] || 0).toLocaleString();
     document.getElementById("serverErrorCount").textContent = (data.statusCodes[5] || 0).toLocaleString();
     document.getElementById("errorCount").textContent = ((data.statusCodes[4] || 0) + (data.statusCodes[5] || 0)).toLocaleString();
-
-    // Bot stats
     document.getElementById("totalBotRequests").textContent = data.botRequests.toLocaleString();
     document.getElementById("botTrafficPercentage").textContent = data.totalEntries > 0 ? `${((data.botRequests / data.totalEntries) * 100).toFixed(1)}%` : "0%";
     document.getElementById("uniqueBots").textContent = data.uniqueBots.size.toLocaleString();
@@ -518,12 +508,10 @@ class LogAnalyzer {
     const listElement = document.getElementById(`${type}BotsList`);
     listElement.innerHTML = "";
     const botsOfType = Object.values(botStats).filter(bot => bot.type === type).sort((a, b) => b.count - a.count);
-
     if (botsOfType.length === 0) {
       listElement.innerHTML = '<div class="empty-category">No bots detected in this category</div>';
       return;
     }
-
     botsOfType.forEach(bot => {
       const percentage = totalRequests > 0 ? ((bot.count / totalRequests) * 100).toFixed(2) : 0;
       const botItem = document.createElement("div");
@@ -566,70 +554,41 @@ class LogAnalyzer {
     const ctx = document.getElementById("responseCodesChart").getContext("2d");
     const dates = Object.keys(dailyData).sort();
     const datasets = [
-        { label: "Success (2xx)", data: dates.map(date => dailyData[date].statusCodes[2] || 0), borderColor: "#27ae60", tension: 0.1 },
-        { label: "Redirection (3xx)", data: dates.map(date => dailyData[date].statusCodes[3] || 0), borderColor: "#f39c12", tension: 0.1 },
-        { label: "Client Error (4xx)", data: dates.map(date => dailyData[date].statusCodes[4] || 0), borderColor: "#e74c3c", tension: 0.1 },
-        { label: "Server Error (5xx)", data: dates.map(date => dailyData[date].statusCodes[5] || 0), borderColor: "#8e44ad", tension: 0.1 },
+        { label: "Success (2xx)", data: dates.map(date => dailyData[date]?.statusCodes[2] || 0), borderColor: "#27ae60", tension: 0.1 },
+        { label: "Redirection (3xx)", data: dates.map(date => dailyData[date]?.statusCodes[3] || 0), borderColor: "#f39c12", tension: 0.1 },
+        { label: "Client Error (4xx)", data: dates.map(date => dailyData[date]?.statusCodes[4] || 0), borderColor: "#e74c3c", tension: 0.1 },
+        { label: "Server Error (5xx)", data: dates.map(date => dailyData[date]?.statusCodes[5] || 0), borderColor: "#8e44ad", tension: 0.1 },
     ];
-    this.charts.responseCodes = new Chart(ctx, {
-        type: "line",
-        data: { labels: dates, datasets },
-        options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
-    });
+    this.charts.responseCodes = new Chart(ctx, { type: "line", data: { labels: dates, datasets }, options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } } });
   }
 
   createEventsChart(dailyData) {
     const ctx = document.getElementById("eventsChart").getContext("2d");
     const dates = Object.keys(dailyData).sort();
-    this.charts.events = new Chart(ctx, {
-        type: "line",
-        data: {
-            labels: dates,
-            datasets: [{ label: "Total Events", data: dates.map(date => dailyData[date].totalEntries), borderColor: "#3498db", tension: 0.1, fill: true }]
-        },
-        options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
-    });
+    this.charts.events = new Chart(ctx, { type: "line", data: { labels: dates, datasets: [{ label: "Total Events", data: dates.map(date => dailyData[date]?.totalEntries || 0), borderColor: "#3498db", tension: 0.1, fill: true }] }, options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } } });
   }
 
   createBotActivityChart(dailyData) {
     const ctx = document.getElementById("botActivityChart").getContext("2d");
     const dates = Object.keys(dailyData).sort();
     const datasets = [
-        { label: "Human Traffic", data: dates.map(date => dailyData[date].humanRequests), borderColor: "#27ae60", tension: 0.1 },
-        { label: "Bot Traffic", data: dates.map(date => dailyData[date].botRequests), borderColor: "#e74c3c", tension: 0.1 }
+        { label: "Human Traffic", data: dates.map(date => dailyData[date]?.humanRequests || 0), borderColor: "#27ae60", tension: 0.1 },
+        { label: "Bot Traffic", data: dates.map(date => dailyData[date]?.botRequests || 0), borderColor: "#e74c3c", tension: 0.1 }
     ];
-    this.charts.botActivity = new Chart(ctx, {
-        type: "line",
-        data: { labels: dates, datasets },
-        options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
-    });
+    this.charts.botActivity = new Chart(ctx, { type: "line", data: { labels: dates, datasets }, options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } } });
   }
 
   createUrlsChart(urlCounts) {
     const ctx = document.getElementById("urlsChart").getContext("2d");
     const topUrls = Object.entries(urlCounts).sort(([, a], [, b]) => b - a).slice(0, 10);
-    this.charts.urls = new Chart(ctx, {
-        type: "bar",
-        data: {
-            labels: topUrls.map(([url]) => (url.length > 30 ? `${url.substring(0, 30)}...` : url)),
-            datasets: [{ label: "Requests", data: topUrls.map(([, count]) => count), backgroundColor: "rgba(52, 152, 219, 0.8)" }]
-        },
-        options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
-    });
+    this.charts.urls = new Chart(ctx, { type: "bar", data: { labels: topUrls.map(([url]) => (url.length > 30 ? `${url.substring(0, 30)}...` : url)), datasets: [{ label: "Requests", data: topUrls.map(([, count]) => count), backgroundColor: "rgba(52, 152, 219, 0.8)" }] }, options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } } });
   }
 
   createBotDistributionChart(botStats) {
     const ctx = document.getElementById("botDistributionChart").getContext("2d");
     const topBots = Object.values(botStats).sort((a, b) => b.count - a.count).slice(0, 10);
     const colors = ["#FF6384", "#36A2EB", "#FFCE56", "#4BC0C0", "#9966FF", "#FF9F40", "#c8a2c8", "#fd7f6f", "#7eb0d5", "#b2e061"];
-    this.charts.botDistribution = new Chart(ctx, {
-        type: "doughnut",
-        data: {
-            labels: topBots.map(bot => bot.name),
-            datasets: [{ data: topBots.map(bot => bot.count), backgroundColor: colors }]
-        },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: "right" } } }
-    });
+    this.charts.botDistribution = new Chart(ctx, { type: "doughnut", data: { labels: topBots.map(bot => bot.name), datasets: [{ data: topBots.map(bot => bot.count), backgroundColor: colors }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: "right" } } } });
   }
 
   createAllTables(data) {
@@ -637,6 +596,7 @@ class LogAnalyzer {
     this.createTopIpsTable(data.ipCounts, data.totalEntries);
     this.createBotTable(data.botStats, data.totalEntries);
     this.createBotUrlHitsTable(data.botUrlHits);
+    this.createTrafficSourceTable(data.humanReferrers);
   }
 
   createTopUrlsTable(urlCounts, totalEntries) {
@@ -646,10 +606,7 @@ class LogAnalyzer {
     topUrls.forEach(([url, count]) => {
       const percentage = totalEntries > 0 ? ((count / totalEntries) * 100).toFixed(2) : 0;
       const row = tbody.insertRow();
-      row.innerHTML = `
-        <td title="${url}">${url.length > 50 ? `${url.substring(0, 50)}...` : url}</td>
-        <td>${count.toLocaleString()}</td>
-        <td class="percentage">${percentage}%</td>`;
+      row.innerHTML = `<td title="${url}">${url.length > 50 ? `${url.substring(0, 50)}...` : url}</td><td>${count.toLocaleString()}</td><td class="percentage">${percentage}%</td>`;
     });
   }
 
@@ -660,10 +617,7 @@ class LogAnalyzer {
     topIps.forEach(([ip, count]) => {
       const percentage = totalEntries > 0 ? ((count / totalEntries) * 100).toFixed(2) : 0;
       const row = tbody.insertRow();
-      row.innerHTML = `
-        <td>${ip}</td>
-        <td>${count.toLocaleString()}</td>
-        <td class="percentage">${percentage}%</td>`;
+      row.innerHTML = `<td>${ip}</td><td>${count.toLocaleString()}</td><td class="percentage">${percentage}%</td>`;
     });
   }
 
@@ -674,32 +628,26 @@ class LogAnalyzer {
     sortedBots.forEach(bot => {
       const percentage = totalEntries > 0 ? ((bot.count / totalEntries) * 100).toFixed(2) : 0;
       const row = tbody.insertRow();
-      row.innerHTML = `
-        <td><strong>${bot.name}</strong><br><small>${bot.company}</small></td>
-        <td><span class="bot-type-${bot.type}">${bot.type.toUpperCase()}</span></td>
-        <td>${bot.count.toLocaleString()}</td>
-        <td class="percentage">${percentage}%</td>
-        <td>${new Date(bot.lastSeen).toLocaleString()}</td>`;
+      row.innerHTML = `<td><strong>${bot.name}</strong><br><small>${bot.company}</small></td><td><span class="bot-type-${bot.type}">${bot.type.toUpperCase()}</span></td><td>${bot.count.toLocaleString()}</td><td class="percentage">${percentage}%</td><td>${new Date(bot.lastSeen).toLocaleString()}</td>`;
     });
   }
 
-  // START: Modified methods for bot URL hits table and dropdown
-  updateMultiSelectDisplayText() {
-      const display = document.getElementById('botUrlFilterDisplay');
-      const checkboxContainer = document.getElementById('botUrlFilterCheckboxes');
-      if (!checkboxContainer) return;
-
+  // REFACTORED: This is now a generic function for both dropdowns
+  updateMultiSelectDisplayText(type) {
+      const display = document.getElementById(`${type}FilterDisplay`);
+      const checkboxContainer = document.getElementById(`${type}FilterCheckboxes`);
+      if (!checkboxContainer || !display) return;
       const selectedCount = checkboxContainer.querySelectorAll('input:checked').length;
       const totalCount = checkboxContainer.querySelectorAll('input').length;
-
+      const noun = type === 'bot' ? 'bots' : 'referrers';
       if (totalCount === 0) {
-          display.textContent = 'No bots detected';
+          display.textContent = `No ${noun} detected`;
       } else if (selectedCount === 0) {
-          display.textContent = 'Select Bots';
+          display.textContent = `Select ${noun.charAt(0).toUpperCase() + noun.slice(1)}`;
       } else if (selectedCount === totalCount) {
-          display.textContent = 'All bots selected';
+          display.textContent = `All ${noun} selected`;
       } else {
-          display.textContent = `${selectedCount} of ${totalCount} bots selected`;
+          display.textContent = `${selectedCount} of ${totalCount} ${noun} selected`;
       }
   }
 
@@ -707,14 +655,11 @@ class LogAnalyzer {
       const container = document.getElementById("botUrlFilterCheckboxes");
       container.innerHTML = "";
       const sortedBots = Object.values(botStats).sort((a, b) => b.count - a.count);
-
       if (sortedBots.length === 0) {
-          this.updateMultiSelectDisplayText();
+          this.updateMultiSelectDisplayText('bot');
           return;
       }
-      
       const top10Bots = sortedBots.slice(0, 10).map(b => b.name);
-
       sortedBots.forEach(bot => {
           const label = document.createElement('label');
           const checkbox = document.createElement('input');
@@ -725,7 +670,41 @@ class LogAnalyzer {
           label.appendChild(document.createTextNode(bot.name));
           container.appendChild(label);
       });
-      this.updateMultiSelectDisplayText();
+      this.updateMultiSelectDisplayText('bot');
+  }
+
+  populateReferrerFilterControls(humanReferrers) {
+      const container = document.getElementById("referrerFilterCheckboxes");
+      container.innerHTML = "";
+      const allReferrers = new Set();
+      const referrerCounts = {};
+      for (const url in humanReferrers) {
+          for (const [referrer, count] of Object.entries(humanReferrers[url])) {
+              allReferrers.add(referrer);
+              referrerCounts[referrer] = (referrerCounts[referrer] || 0) + count;
+          }
+      }
+      const sortedReferrers = Array.from(allReferrers).sort((a, b) => {
+          if (a === 'Direct/Internal') return -1;
+          if (b === 'Direct/Internal') return 1;
+          return a.localeCompare(b);
+      });
+      if (sortedReferrers.length === 0) {
+          this.updateMultiSelectDisplayText('referrer');
+          return;
+      }
+      const top5External = Object.entries(referrerCounts).filter(([ref]) => ref !== 'Direct/Internal').sort(([,a],[,b]) => b-a).slice(0, 5).map(([ref]) => ref);
+      sortedReferrers.forEach(referrer => {
+          const label = document.createElement('label');
+          const checkbox = document.createElement('input');
+          checkbox.type = 'checkbox';
+          checkbox.value = referrer;
+          checkbox.checked = referrer === 'Direct/Internal' || top5External.includes(referrer);
+          label.appendChild(checkbox);
+          label.appendChild(document.createTextNode(referrer));
+          container.appendChild(label);
+      });
+      this.updateMultiSelectDisplayText('referrer');
   }
 
   createBotUrlHitsTable(botUrlHits) {
@@ -733,32 +712,22 @@ class LogAnalyzer {
       const tbody = document.querySelector("#botUrlHitsTable tbody");
       thead.innerHTML = "";
       tbody.innerHTML = "";
-      
       const selectedBots = Array.from(document.querySelectorAll('#botUrlFilterCheckboxes input:checked')).map(cb => cb.value);
-
-      // This is the key logic change
       if (selectedBots.length === 0) {
-          const row = tbody.insertRow();
-          row.className = 'table-placeholder';
-          const cell = row.insertCell();
-          cell.colSpan = 1; // It will expand anyway
-          cell.textContent = 'Select one or more bots to display data.';
+          tbody.innerHTML = `<tr class="table-placeholder"><td colspan="1">Select one or more bots to display data.</td></tr>`;
           return;
       }
-
       const headerRow = thead.insertRow();
       headerRow.innerHTML = `<th>URL</th>`;
       selectedBots.forEach(botName => {
           headerRow.innerHTML += `<th>${botName}</th>`;
       });
       headerRow.innerHTML += `<th>Total</th>`;
-
       let dataForTable = [];
       for (const [url, hitsByBot] of Object.entries(botUrlHits)) {
           let totalHitsForSelectedBots = 0;
           let hasHitsFromSelected = false;
           const botCounts = {};
-
           for(const botName of selectedBots) {
               const count = hitsByBot[botName] || 0;
               if (count > 0) {
@@ -767,39 +736,76 @@ class LogAnalyzer {
                   botCounts[botName] = count;
               }
           }
-
           if(hasHitsFromSelected) {
-              dataForTable.push({
-                  url,
-                  totalHits: totalHitsForSelectedBots,
-                  botCounts
-              });
+              dataForTable.push({ url, totalHits: totalHitsForSelectedBots, botCounts });
           }
       }
-
       dataForTable.sort((a,b) => b.totalHits - a.totalHits);
       const top100 = dataForTable.slice(0, 100);
-
       if (top100.length === 0) {
-        const row = tbody.insertRow();
-        row.className = 'table-placeholder';
-        const cell = row.insertCell();
-        cell.colSpan = selectedBots.length + 2;
-        cell.textContent = 'No hits found for the selected bots in this period.';
+        tbody.innerHTML = `<tr class="table-placeholder"><td colspan="${selectedBots.length + 2}">No hits found for the selected bots in this period.</td></tr>`;
         return;
       }
-
       top100.forEach(rowData => {
           const row = tbody.insertRow();
-          row.innerHTML = `<td title="${rowData.url}">${rowData.url.length > 70 ? `${rowData.url.substring(0, 70)}...` : rowData.url}</td>`;
-          
+          let rowHTML = `<td title="${rowData.url}">${rowData.url.length > 70 ? `${rowData.url.substring(0, 70)}...` : rowData.url}</td>`;
           selectedBots.forEach(botName => {
-              row.innerHTML += `<td>${(rowData.botCounts[botName] || 0).toLocaleString()}</td>`;
+              rowHTML += `<td>${(rowData.botCounts[botName] || 0).toLocaleString()}</td>`;
           });
-          row.innerHTML += `<td><strong>${rowData.totalHits.toLocaleString()}</strong></td>`;
+          rowHTML += `<td><strong>${rowData.totalHits.toLocaleString()}</strong></td>`;
+          row.innerHTML = rowHTML;
       });
   }
-  // END: Modified methods
+
+  createTrafficSourceTable(humanReferrers) {
+    const thead = document.querySelector("#trafficSourceTable thead");
+    const tbody = document.querySelector("#trafficSourceTable tbody");
+    thead.innerHTML = "";
+    tbody.innerHTML = "";
+    const selectedReferrers = Array.from(document.querySelectorAll('#referrerFilterCheckboxes input:checked')).map(cb => cb.value);
+    if (selectedReferrers.length === 0) {
+        tbody.innerHTML = `<tr class="table-placeholder"><td colspan="1">Select one or more referrers to display data.</td></tr>`;
+        return;
+    }
+    const headerRow = thead.insertRow();
+    headerRow.innerHTML = `<th>Destination URL</th>`;
+    selectedReferrers.forEach(ref => {
+        headerRow.innerHTML += `<th>${ref}</th>`;
+    });
+    headerRow.innerHTML += `<th>Total</th>`;
+    let dataForTable = [];
+    for (const [url, referrers] of Object.entries(humanReferrers)) {
+        let totalHitsForSelected = 0;
+        let hasHitsFromSelected = false;
+        const referrerCounts = {};
+        for(const ref of selectedReferrers) {
+            const count = referrers[ref] || 0;
+            if (count > 0) {
+                hasHitsFromSelected = true;
+                totalHitsForSelected += count;
+                referrerCounts[ref] = count;
+            }
+        }
+        if(hasHitsFromSelected) {
+            dataForTable.push({ url, totalHits: totalHitsForSelected, referrerCounts });
+        }
+    }
+    dataForTable.sort((a,b) => b.totalHits - a.totalHits);
+    const top100 = dataForTable.slice(0, 100);
+    if (top100.length === 0) {
+      tbody.innerHTML = `<tr class="table-placeholder"><td colspan="${selectedReferrers.length + 2}">No traffic found from the selected referrers in this period.</td></tr>`;
+      return;
+    }
+    top100.forEach(rowData => {
+        const row = tbody.insertRow();
+        let rowHTML = `<td title="${rowData.url}">${rowData.url.length > 50 ? `${rowData.url.substring(0, 50)}...` : rowData.url}</td>`;
+        selectedReferrers.forEach(ref => {
+            rowHTML += `<td>${(rowData.referrerCounts[ref] || 0).toLocaleString()}</td>`;
+        });
+        rowHTML += `<td><strong>${rowData.totalHits.toLocaleString()}</strong></td>`;
+        row.innerHTML = rowHTML;
+    });
+  }
 
   formatBytes(bytes) {
     if (bytes === 0) return "0 B";
@@ -820,15 +826,12 @@ class LogAnalyzer {
     const endDateInput = document.getElementById("endDate");
     const minDateStr = minDate.toISOString().split("T")[0];
     const maxDateStr = maxDate.toISOString().split("T")[0];
-
     startDateInput.min = minDateStr;
     startDateInput.max = maxDateStr;
     endDateInput.min = minDateStr;
     endDateInput.max = maxDateStr;
-
     startDateInput.value = minDateStr;
     endDateInput.value = maxDateStr;
-
     document.getElementById("totalLogEntries").textContent = `${this.fullFileAnalysis.totalEntries.toLocaleString()} total entries`;
     document.getElementById("dateRangeSpan").textContent = `${minDate.toLocaleDateString()} - ${maxDate.toLocaleDateString()}`;
   }
@@ -837,12 +840,10 @@ class LogAnalyzer {
     if (!this.fullFileAnalysis) return;
     const startDate = new Date(document.getElementById("startDate").value + 'T00:00:00.000Z');
     const endDate = new Date(document.getElementById("endDate").value + 'T00:00:00.000Z');
-    
     if (endDate < startDate) {
         alert("End date cannot be earlier than start date.");
         return;
     }
-
     this.currentAnalysis = this.aggregateStatsForRange(startDate, endDate);
     this.displayResults(this.currentAnalysis);
     this.showFilteredInfo(this.currentAnalysis);
@@ -853,10 +854,8 @@ class LogAnalyzer {
     const maxDate = new Date(this.fullFileAnalysis.maxDate);
     const startDate = new Date(maxDate);
     startDate.setUTCDate(startDate.getUTCDate() - (days - 1));
-
     document.getElementById("startDate").value = startDate.toISOString().split("T")[0];
     document.getElementById("endDate").value = maxDate.toISOString().split("T")[0];
-
     this.currentAnalysis = this.aggregateStatsForRange(startDate, maxDate);
     this.displayResults(this.currentAnalysis);
     this.showFilteredInfo(this.currentAnalysis);

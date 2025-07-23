@@ -1020,3 +1020,23 @@ tr:hover {
     text-align: left;
   }
 }
+
+.multiselect-search-container {
+    padding: 0 8px 8px 8px; /* Add some spacing */
+    border-bottom: 1px solid #ecf0f1;
+}
+
+.multiselect-search-input {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #bdc3c7;
+    border-radius: 4px;
+    box-sizing: border-box; /* Important for correct sizing */
+    font-size: 0.9rem;
+}
+
+.multiselect-search-input:focus {
+    outline: none;
+    border-color: #3498db;
+    box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+}

@@ -129,6 +129,15 @@ class LogAnalyzer {
     const referrerFilterDisplay = document.getElementById("referrerFilterDisplay");
     const referrerFilterOptions = document.getElementById("referrerFilterOptions");
 
+    // Get search input elements
+    const botFilterSearch = document.getElementById("botFilterSearch");
+    const referrerFilterSearch = document.getElementById("referrerFilterSearch");
+    
+    //  Get checkbox container elements for the search function
+    const botCheckboxContainer = document.getElementById("botUrlFilterCheckboxes");
+    const referrerCheckboxContainer = document.getElementById("referrerFilterCheckboxes");
+
+
     // --- Attach event listeners ---
     fileInput.addEventListener("change", (e) => {
       if (e.target.files.length > 0) this.handleFileSelection(e.target.files[0]);
@@ -198,6 +207,10 @@ class LogAnalyzer {
         this.updateMultiSelectDisplayText('referrer');
         this.createTrafficSourceTable(this.currentAnalysis.humanReferrers);
     });
+    
+    // --- Activate Search Functionality ---
+    this.setupFilterSearch(botFilterSearch, botCheckboxContainer);
+    this.setupFilterSearch(referrerFilterSearch, referrerCheckboxContainer);
     
     // Global click listener to close dropdowns
     window.addEventListener('click', (e) => {
@@ -903,6 +916,21 @@ class LogAnalyzer {
     a.download = `access-log-analysis-${new Date().toISOString().split("T")[0]}.json`;
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+   setupFilterSearch(searchInput, checkboxContainer) {
+    searchInput.addEventListener('keyup', (e) => {
+        const searchTerm = e.target.value.toLowerCase();
+        const labels = checkboxContainer.querySelectorAll('label');
+        labels.forEach(label => {
+            const labelText = label.textContent.toLowerCase();
+            if (labelText.includes(searchTerm)) {
+                label.style.display = 'flex'; // Use 'flex' to match the label's style
+            } else {
+                label.style.display = 'none';
+            }
+        });
+    });
   }
 }
 

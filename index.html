@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,6 +8,7 @@
     <link rel="stylesheet" href="styles.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
+
 <body>
     <div class="container">
         <header class="header">
@@ -108,7 +110,7 @@
                     <div class="stat-value" id="uniqueUrls">0</div>
                 </div>
                 <div class="stat-card">
-                    <h3>Unique URLs per day</h3>
+                    <h3>Unique URLs / day</h3>
                     <div class="stat-value" id="uniqueUrlsPerDay">0</div>
                 </div>
                 <div class="stat-card">
@@ -116,7 +118,7 @@
                     <div class="stat-value" id="totalEvents">0</div>
                 </div>
                 <div class="stat-card">
-                    <h3>Events per day</h3>
+                    <h3>Events / day</h3>
                     <div class="stat-value" id="eventsPerDay">0</div>
                 </div>
                 <div class="stat-card">
@@ -365,58 +367,101 @@
                                 <div class="multiselect-actions">
                                     <button class="filter-action-btn" data-action="select-all">Select All</button>
                                     <button class="filter-action-btn" data-action="deselect-all">Deselect All</button>
-                                    </div>
-                                     <div class="multiselect-search-container">
-        <input type="text" id="botFilterSearch" class="multiselect-search-input" placeholder="Search bots...">
-    </div>
-                                    <div class="multiselect-checkboxes" id="botUrlFilterCheckboxes">
-                                        <!-- Checkboxes will be populated here -->
-                                    </div>
+                                </div>
+                                <div class="multiselect-search-container">
+                                    <input type="text" id="botFilterSearch" class="multiselect-search-input"
+                                        placeholder="Search bots...">
+                                </div>
+                                <div class="multiselect-checkboxes" id="botUrlFilterCheckboxes">
+                                    <!-- Checkboxes will be populated here -->
                                 </div>
                             </div>
-                        </div>
-                        <div class="table-wrapper">
-                            <table id="botUrlHitsTable">
-                                <thead></thead>
-                                <tbody></tbody>
-                            </table>
                         </div>
                     </div>
-                    <!-- END: Modified Bot URL Hits Table -->
-                    <div class="interactive-table-card full-width">
-                        <div class="chart-header">
-                            <h3>Human Traffic Sources</h3>
-                            <button class="export-btn" data-table="traffic-sources">Export CSV</button>
-                        </div>
-                        <div class="bot-filter-controls">
-                            <div class="multiselect-dropdown" id="referrerFilterDropdown">
-                                <div class="multiselect-display" id="referrerFilterDisplay">Select Referrers</div>
-                                <div class="multiselect-options" id="referrerFilterOptions">
-                                    <div class="multiselect-actions">
-                                        <button class="filter-action-btn" data-action="select-all">Select All</button>
+                    <div class="table-wrapper">
+                        <table id="botUrlHitsTable">
+                            <thead></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+                <!-- END: Modified Bot URL Hits Table -->
+                <div class="interactive-table-card full-width">
+                    <div class="chart-header">
+                        <h3>Human Traffic Sources</h3>
+                        <button class="export-btn" data-table="traffic-sources">Export CSV</button>
+                    </div>
+                    <div class="bot-filter-controls">
+                        <div class="multiselect-dropdown" id="referrerFilterDropdown">
+                            <div class="multiselect-display" id="referrerFilterDisplay">Select Referrers</div>
+                            <div class="multiselect-options" id="referrerFilterOptions">
+                                <div class="multiselect-actions">
+                                    <button class="filter-action-btn" data-action="select-all">Select All</button>
                                     <button class="filter-action-btn" data-action="deselect-all">Deselect All</button>
-                                        </div>
-                                         <div class="multiselect-search-container">
-        <input type="text" id="referrerFilterSearch" class="multiselect-search-input" placeholder="Search referrers...">
-    </div>
-                                        <div class="multiselect-checkboxes" id="referrerFilterCheckboxes">
-                                            <!-- Referrer checkboxes will be populated here -->
-                                        </div>
-                                    </div>
+                                </div>
+                                <div class="multiselect-search-container">
+                                    <input type="text" id="referrerFilterSearch" class="multiselect-search-input"
+                                        placeholder="Search referrers...">
+                                </div>
+                                <div class="multiselect-checkboxes" id="referrerFilterCheckboxes">
+                                    <!-- Referrer checkboxes will be populated here -->
                                 </div>
                             </div>
-                            <div class="table-wrapper">
-                                <table id="trafficSourceTable">
-                                    <thead></thead>
-                                    <tbody></tbody>
-                                </table>
-                            </div>
                         </div>
+                    </div>
+                    <div class="table-wrapper">
+                        <table id="trafficSourceTable">
+                            <thead></thead>
+                            <tbody></tbody>
+                        </table>
                     </div>
                 </div>
             </div>
+        </div>
 
-            <script src="script.js"></script>
+
+        <!-- START: Rejection Rules Modal -->
+        <div id="rejectionModal" class="modal-overlay hidden">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Exclude URL Prefixes</h3>
+                    <button id="closeRejectionModal" class="modal-close-btn">×</button>
+                </div>
+                <div class="modal-body">
+                    <p>Enter any URL prefixes you wish to exclude from the analysis. For example, entering
+                        <code>/wp-json/</code> will ignore all requests to that path.</p>
+                    <div id="rejectionRulesContainer">
+                        <!-- Dynamic rejection rules will be added here -->
+                        <div id="rejectionRulesContainer">
+                            <!-- Dynamic rejection rules will be added here -->
+                            <div class="rejection-rule-row">
+                                <input type="text" placeholder="/path/to/exclude/" value="/wp-">
+                                <button class="remove-rule-btn">−</button>
+                            </div>
+                            <div class="rejection-rule-row">
+                                <input type="text" placeholder="/path/to/exclude/" value="/robots.txt">
+                                <button class="remove-rule-btn">−</button>
+                            </div>
+                            <div class="rejection-rule-row">
+                                <input type="text" placeholder="/path/to/exclude/" value="/sitemaps.xml">
+                                <button class="remove-rule-btn">−</button>
+                            </div>
+                        </div>
+                    </div>
+                    <button id="addRejectionRule" class="add-rule-btn">+ Add Rule</button>
+                </div>
+                <div class="modal-footer">
+                    <button id="analyzeWithoutRejection" class="modal-btn secondary">Analyze Without Filtering</button>
+                    <button id="confirmRejectionAndAnalyze" class="modal-btn primary">Apply Filters & Analyze</button>
+                </div>
+            </div>
+        </div>
+        <!-- END: Rejection Rules Modal -->
+    </div>
+
+
+
+    <script src="script.js"></script>
 </body>
 
 </html>

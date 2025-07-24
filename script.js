@@ -4,6 +4,7 @@ class LogAnalyzer {
     this.currentAnalysis = null;
     this.fullFileAnalysis = null;
     this.charts = {};
+    this.rejectionPatterns = []; // Add this line
     this.botPatterns = this.initializeBotPatterns();
     this.initializeEventListeners();
   }
@@ -138,6 +139,14 @@ class LogAnalyzer {
     const referrerCheckboxContainer = document.getElementById("referrerFilterCheckboxes");
 
 
+     // Add these new element lookups for the modal
+    const rejectionModal = document.getElementById("rejectionModal");
+    const closeRejectionModalBtn = document.getElementById("closeRejectionModal");
+    const addRejectionRuleBtn = document.getElementById("addRejectionRule");
+    const rejectionRulesContainer = document.getElementById("rejectionRulesContainer");
+    const confirmRejectionBtn = document.getElementById("confirmRejectionAndAnalyze");
+    const analyzeWithoutRejectionBtn = document.getElementById("analyzeWithoutRejection");
+
     // --- Attach event listeners ---
     fileInput.addEventListener("change", (e) => {
       if (e.target.files.length > 0) this.handleFileSelection(e.target.files[0]);
@@ -207,6 +216,42 @@ class LogAnalyzer {
         this.updateMultiSelectDisplayText('referrer');
         this.createTrafficSourceTable(this.currentAnalysis.humanReferrers);
     });
+
+      analyzeBtn.addEventListener("click", () => {
+        // Instead of analyzing directly, show the popup first.
+        rejectionModal.classList.remove('hidden');
+    });
+
+     // --- ADD listeners for the new modal ---
+    closeRejectionModalBtn.addEventListener('click', () => rejectionModal.classList.add('hidden'));
+
+    analyzeWithoutRejectionBtn.addEventListener('click', () => {
+        this.rejectionPatterns = []; // Ensure patterns are empty
+        rejectionModal.classList.add('hidden');
+        this.analyzeLogFile(); // Proceed to analyze
+    });
+
+     confirmRejectionBtn.addEventListener('click', () => {
+        // Collect all patterns from the input fields
+        const inputs = rejectionRulesContainer.querySelectorAll('input');
+        this.rejectionPatterns = Array.from(inputs)
+            .map(input => input.value.trim())
+            .filter(pattern => pattern !== ""); // Keep only non-empty patterns
+
+        rejectionModal.classList.add('hidden');
+        this.analyzeLogFile(); // Proceed to analyze with the new patterns
+    });
+
+    addRejectionRuleBtn.addEventListener('click', () => {
+        this.addRejectionRuleRow();
+    });
+
+    // Use event delegation for dynamically added remove buttons
+    rejectionRulesContainer.addEventListener('click', (e) => {
+        if (e.target.classList.contains('remove-rule-btn')) {
+            e.target.closest('.rejection-rule-row').remove();
+        }
+    });
     
     // --- Activate Search Functionality ---
     this.setupFilterSearch(botFilterSearch, botCheckboxContainer);
@@ -221,6 +266,8 @@ class LogAnalyzer {
             referrerFilterOptions.classList.remove('visible');
         }
     });
+
+
   }
 
   handleFileSelection(file) {
@@ -337,9 +384,37 @@ class LogAnalyzer {
     this.updateProgress(80);
   }
 
+   addRejectionRuleRow(value = '') {
+    const container = document.getElementById('rejectionRulesContainer');
+    const row = document.createElement('div');
+    row.className = 'rejection-rule-row';
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.placeholder = '/path/to/exclude/';
+    input.value = value;
+
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'remove-rule-btn';
+    removeBtn.textContent = '−';
+
+    row.appendChild(input);
+    row.appendChild(removeBtn);
+    container.appendChild(row);
+  }
+
   processLogLine(line, logRegex) {
     const match = logRegex.exec(line);
     if (!match) return;
+
+    const [, , , , urlmatch] = match; // Only grab the URL for the check
+    for (const pattern of this.rejectionPatterns) {
+        // If the URL starts with any of the rejection patterns, stop processing this line.
+        if (pattern && urlmatch.startsWith(pattern)) {
+            return; 
+        }
+    }
+
     const [, ip, timestamp, method, url, status, size, referer, userAgent] = match;
     try {
       const timestampStr = timestamp.replace(/(\d{2})\/(\w{3})\/(\d{4}):(\d{2}):(\d{2}):(\d{2}) ([+-]\d{4})/, "$1 $2 $3 $4:$5:$6");
@@ -385,7 +460,7 @@ class LogAnalyzer {
       dayStats.botUrlHits[entry.url][botInfo.name] = (dayStats.botUrlHits[entry.url][botInfo.name] || 0) + 1;
     } else {
       dayStats.humanRequests++;
-      let referrerDomain = 'Direct/Internal';
+      let referrerDomain = 'Direct';
       // Only parse valid, external http/https referrers
       if (entry.referer && entry.referer.startsWith('http')) {
           try {

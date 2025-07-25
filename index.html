@@ -23,46 +23,41 @@
             </div>
         </header>
 
-        <!-- Upload Section - Always Visible -->
+        <!-- Upload Section -->
         <div class="upload-section">
             <div class="upload-container">
                 <div class="dropbox" id="dropbox">
+                    <!-- Default Dropbox Content -->
                     <div class="dropbox-content">
                         <div class="upload-icon">📁</div>
-                        <p class="dropbox-text">Drag & drop your log file here</p>
+                        <p class="dropbox-text">Drag & drop your log file(s) here</p>
                         <p class="dropbox-subtext">or click to browse (.log, .txt files)</p>
-                        <input type="file" id="logFile" accept=".log,.txt" class="file-input">
+                        <input type="file" id="logFile" accept=".log,.txt" class="file-input" multiple>
                     </div>
-                    <div class="file-info hidden" id="fileInfo">
-                        <div class="file-icon">📄</div>
-                        <div class="file-details">
-                            <div class="file-name" id="fileName"></div>
-                            <div class="file-size" id="fileSize"></div>
-                        </div>
-                        <button class="remove-file" id="removeFile" title="Remove file">✕</button>
+                    <!-- REWORKED: Container for the file list -->
+                    <div id="fileListContainer" class="hidden">
+                        <!-- A list of selected files will be dynamically added here -->
                     </div>
                 </div>
                 <div id="fileSizeWarning" class="file-size-warning hidden">
-                    <strong>Large File Detected:</strong> This file may take several minutes to process. Consider using
-                    date filters after analysis to improve performance.
+                    <strong>Large File(s) Detected:</strong> Processing may take several minutes.
                 </div>
-                <button id="analyzeBtn" class="analyze-btn" disabled>Analyze Log File</button>
+                <button id="analyzeBtn" class="analyze-btn" disabled>Analyze Log File(s)</button>
             </div>
         </div>
 
         <!-- Loading Indicator -->
         <div id="loadingIndicator" class="loading hidden">
             <div class="spinner"></div>
-            <p>Analyzing log file...</p>
+            <p>Analyzing log file(s)...</p>
             <div class="loading-details">
-                <span id="loadingStatus">Processing entries...</span>
+                <span id="loadingStatus">Processing...</span>
             </div>
             <div class="progress-container">
                 <div class="progress-bar" id="progressBar"></div>
             </div>
             <div class="performance-tip">
-                <strong>Tip:</strong> Large files may take several minutes to process. You can continue using other
-                browser tabs while this runs.
+                <strong>Tip:</strong> Large files may take several minutes. This runs in your browser.
             </div>
         </div>
 
@@ -429,7 +424,8 @@
                 </div>
                 <div class="modal-body">
                     <p>Enter any URL prefixes you wish to exclude from the analysis. For example, entering
-                        <code>/wp-json/</code> will ignore all requests to that path.</p>
+                        <code>/wp-json/</code> will ignore all requests to that path.
+                    </p>
                     <div id="rejectionRulesContainer">
                         <!-- Dynamic rejection rules will be added here -->
                         <div id="rejectionRulesContainer">

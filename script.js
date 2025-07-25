@@ -5,6 +5,7 @@ class LogAnalyzer {
     this.fullFileAnalysis = null;
     this.charts = {};
     this.rejectionPatterns = []; // Add this line
+    this.selectedFiles = [];
     this.botPatterns = this.initializeBotPatterns();
     this.initializeEventListeners();
   }
@@ -25,7 +26,7 @@ class LogAnalyzer {
       minDate: null,
       maxDate: null,
       botUrlHits: {},
-      humanReferrers: {}, 
+      humanReferrers: {},
     };
   }
 
@@ -113,6 +114,7 @@ class LogAnalyzer {
     const fileInput = document.getElementById("logFile");
     const analyzeBtn = document.getElementById("analyzeBtn");
     const dropbox = document.getElementById("dropbox");
+    const fileListContainer = document.getElementById("fileListContainer");
     const removeFileBtn = document.getElementById("removeFile");
     const clearDataBtn = document.getElementById("clearData");
     const exportReportBtn = document.getElementById("exportReport");
@@ -133,13 +135,13 @@ class LogAnalyzer {
     // Get search input elements
     const botFilterSearch = document.getElementById("botFilterSearch");
     const referrerFilterSearch = document.getElementById("referrerFilterSearch");
-    
+
     //  Get checkbox container elements for the search function
     const botCheckboxContainer = document.getElementById("botUrlFilterCheckboxes");
     const referrerCheckboxContainer = document.getElementById("referrerFilterCheckboxes");
 
 
-     // Add these new element lookups for the modal
+    // Add these new element lookups for the modal
     const rejectionModal = document.getElementById("rejectionModal");
     const closeRejectionModalBtn = document.getElementById("closeRejectionModal");
     const addRejectionRuleBtn = document.getElementById("addRejectionRule");
@@ -148,35 +150,28 @@ class LogAnalyzer {
     const analyzeWithoutRejectionBtn = document.getElementById("analyzeWithoutRejection");
 
     // --- Attach event listeners ---
-    fileInput.addEventListener("change", (e) => {
-      if (e.target.files.length > 0) this.handleFileSelection(e.target.files[0]);
-    });
-    dropbox.addEventListener("click", (e) => {
-      if (!e.target.closest(".remove-file")) fileInput.click();
-    });
-    dropbox.addEventListener("dragover", (e) => {
-      e.preventDefault();
-      dropbox.classList.add("dragover");
-    });
-    dropbox.addEventListener("dragleave", (e) => {
-      e.preventDefault();
-      dropbox.classList.remove("dragover");
-    });
+    fileInput.addEventListener("change", (e) => this.addFiles(e.target.files));
+
+    dropbox.addEventListener("click", () => fileInput.click());
+    dropbox.addEventListener("dragover", (e) => { e.preventDefault(); dropbox.classList.add("dragover"); });
+    dropbox.addEventListener("dragleave", (e) => { e.preventDefault(); dropbox.classList.remove("dragover"); });
     dropbox.addEventListener("drop", (e) => {
       e.preventDefault();
       dropbox.classList.remove("dragover");
-      const file = e.dataTransfer.files[0];
-      if (file && (file.type === "text/plain" || file.name.endsWith(".log") || file.name.endsWith(".txt"))) {
-        fileInput.files = e.dataTransfer.files;
-        this.handleFileSelection(file);
-      } else {
-        alert("Please select a valid log file (.log or .txt)");
+      if (e.dataTransfer.files.length > 0) {
+        this.addFiles(e.dataTransfer.files);
       }
     });
-    removeFileBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      this.clearFileSelection();
+
+    fileListContainer.addEventListener('click', (e) => {
+      if (e.target.classList.contains('remove-file')) {
+        e.stopPropagation();
+        const indexToRemove = parseInt(e.target.dataset.index, 10);
+        this.removeFile(indexToRemove);
+      }
     });
+
+
     analyzeBtn.addEventListener("click", () => this.analyzeLogFile());
     clearDataBtn.addEventListener("click", () => this.clearAllData());
     exportReportBtn.addEventListener("click", () => this.exportFullReport());
@@ -193,81 +188,132 @@ class LogAnalyzer {
     // Bot Dropdown
     botUrlFilterDisplay.addEventListener("click", () => botUrlFilterOptions.classList.toggle('visible'));
     botUrlFilterOptions.addEventListener("click", (e) => {
-        if (e.target.matches('[data-action="select-all"]')) {
-            botUrlFilterOptions.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = true);
-        }
-        if (e.target.matches('[data-action="deselect-all"]')) {
-            botUrlFilterOptions.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false);
-        }
-        // Update table regardless of what was clicked inside
-        this.updateMultiSelectDisplayText('bot');
-        this.createBotUrlHitsTable(this.currentAnalysis.botUrlHits);
+      if (e.target.matches('[data-action="select-all"]')) {
+        botUrlFilterOptions.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = true);
+      }
+      if (e.target.matches('[data-action="deselect-all"]')) {
+        botUrlFilterOptions.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false);
+      }
+      // Update table regardless of what was clicked inside
+      this.updateMultiSelectDisplayText('bot');
+      this.createBotUrlHitsTable(this.currentAnalysis.botUrlHits);
     });
 
     // Referrer Dropdown
     referrerFilterDisplay.addEventListener("click", () => referrerFilterOptions.classList.toggle('visible'));
     referrerFilterOptions.addEventListener("click", (e) => {
-        if (e.target.matches('[data-action="select-all"]')) {
-            referrerFilterOptions.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = true);
-        }
-        if (e.target.matches('[data-action="deselect-all"]')) {
-            referrerFilterOptions.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false);
-        }
-        this.updateMultiSelectDisplayText('referrer');
-        this.createTrafficSourceTable(this.currentAnalysis.humanReferrers);
+      if (e.target.matches('[data-action="select-all"]')) {
+        referrerFilterOptions.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = true);
+      }
+      if (e.target.matches('[data-action="deselect-all"]')) {
+        referrerFilterOptions.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false);
+      }
+      this.updateMultiSelectDisplayText('referrer');
+      this.createTrafficSourceTable(this.currentAnalysis.humanReferrers);
     });
 
-      analyzeBtn.addEventListener("click", () => {
-        // Instead of analyzing directly, show the popup first.
-        rejectionModal.classList.remove('hidden');
+    analyzeBtn.addEventListener("click", () => {
+      // Instead of analyzing directly, show the popup first.
+      rejectionModal.classList.remove('hidden');
     });
 
-     // --- ADD listeners for the new modal ---
+    // --- ADD listeners for the new modal ---
     closeRejectionModalBtn.addEventListener('click', () => rejectionModal.classList.add('hidden'));
 
     analyzeWithoutRejectionBtn.addEventListener('click', () => {
-        this.rejectionPatterns = []; // Ensure patterns are empty
-        rejectionModal.classList.add('hidden');
-        this.analyzeLogFile(); // Proceed to analyze
+      this.rejectionPatterns = []; // Ensure patterns are empty
+      rejectionModal.classList.add('hidden');
+      this.analyzeLogFile(); // Proceed to analyze
     });
 
-     confirmRejectionBtn.addEventListener('click', () => {
-        // Collect all patterns from the input fields
-        const inputs = rejectionRulesContainer.querySelectorAll('input');
-        this.rejectionPatterns = Array.from(inputs)
-            .map(input => input.value.trim())
-            .filter(pattern => pattern !== ""); // Keep only non-empty patterns
+    confirmRejectionBtn.addEventListener('click', () => {
+      // Collect all patterns from the input fields
+      const inputs = rejectionRulesContainer.querySelectorAll('input');
+      this.rejectionPatterns = Array.from(inputs)
+        .map(input => input.value.trim())
+        .filter(pattern => pattern !== ""); // Keep only non-empty patterns
 
-        rejectionModal.classList.add('hidden');
-        this.analyzeLogFile(); // Proceed to analyze with the new patterns
+      rejectionModal.classList.add('hidden');
+      this.analyzeLogFile(); // Proceed to analyze with the new patterns
     });
 
     addRejectionRuleBtn.addEventListener('click', () => {
-        this.addRejectionRuleRow();
+      this.addRejectionRuleRow();
     });
 
     // Use event delegation for dynamically added remove buttons
     rejectionRulesContainer.addEventListener('click', (e) => {
-        if (e.target.classList.contains('remove-rule-btn')) {
-            e.target.closest('.rejection-rule-row').remove();
-        }
+      if (e.target.classList.contains('remove-rule-btn')) {
+        e.target.closest('.rejection-rule-row').remove();
+      }
     });
-    
+
     // --- Activate Search Functionality ---
     this.setupFilterSearch(botFilterSearch, botCheckboxContainer);
     this.setupFilterSearch(referrerFilterSearch, referrerCheckboxContainer);
-    
+
     // Global click listener to close dropdowns
     window.addEventListener('click', (e) => {
-        if (!botUrlFilterDropdown.contains(e.target)) {
-            botUrlFilterOptions.classList.remove('visible');
-        }
-        if (!referrerFilterDropdown.contains(e.target)) {
-            referrerFilterOptions.classList.remove('visible');
-        }
+      if (!botUrlFilterDropdown.contains(e.target)) {
+        botUrlFilterOptions.classList.remove('visible');
+      }
+      if (!referrerFilterDropdown.contains(e.target)) {
+        referrerFilterOptions.classList.remove('visible');
+      }
     });
 
 
+  }
+
+  addFiles(fileList) {
+    const newFiles = Array.from(fileList).filter(file => file.type === 'text/plain' || file.name.endsWith('.log') || file.name.endsWith('.txt'));
+
+    for (const newFile of newFiles) {
+      const isDuplicate = this.selectedFiles.some(
+        existingFile => existingFile.name === newFile.name && existingFile.size === newFile.size
+      );
+      if (!isDuplicate) {
+        this.selectedFiles.push(newFile);
+      }
+    }
+    this.updateFileDisplay();
+  }
+
+  updateFileDisplay() {
+    const fileListContainer = document.getElementById('fileListContainer');
+    const dropboxContent = document.querySelector('.dropbox-content');
+
+    fileListContainer.innerHTML = ''; // Always clear the current list
+
+    if (this.selectedFiles.length > 0) {
+      dropboxContent.classList.add('hidden');
+      fileListContainer.classList.remove('hidden');
+
+      this.selectedFiles.forEach((file, index) => {
+        const fileItem = document.createElement('div');
+        fileItem.className = 'file-list-item';
+        fileItem.innerHTML = `
+                <div class="file-icon">📄</div>
+                <div class="file-details">
+                    <div class="file-name" title="${file.name}">${file.name}</div>
+                    <div class="file-size">${this.formatFileSize(file.size)}</div>
+                </div>
+                <button class="remove-file" data-index="${index}" title="Remove file">✕</button>
+            `;
+        fileListContainer.appendChild(fileItem);
+      });
+    } else {
+      dropboxContent.classList.remove('hidden');
+      fileListContainer.classList.add('hidden');
+    }
+
+    document.getElementById('analyzeBtn').disabled = this.selectedFiles.length === 0;
+  }
+  removeFile(index) {
+    if (index > -1 && index < this.selectedFiles.length) {
+      this.selectedFiles.splice(index, 1);
+      this.updateFileDisplay();
+    }
   }
 
   handleFileSelection(file) {
@@ -281,11 +327,9 @@ class LogAnalyzer {
   }
 
   clearFileSelection() {
+    this.selectedFiles = [];
     document.getElementById("logFile").value = "";
-    document.querySelector(".dropbox-content").classList.remove("hidden");
-    document.getElementById("fileInfo").classList.add("hidden");
-    document.getElementById("fileSizeWarning").classList.add("hidden");
-    document.getElementById("analyzeBtn").disabled = true;
+    this.updateFileDisplay();
   }
 
   clearAllData() {
@@ -297,7 +341,7 @@ class LogAnalyzer {
     document.getElementById("filteredInfo").classList.add("hidden");
     this.clearFileSelection();
     document.getElementById("progressBar").style.width = "0%";
-    
+
     // Clear bot table
     document.getElementById("botUrlFilterCheckboxes").innerHTML = "";
     document.querySelector("#botUrlHitsTable tbody").innerHTML = "";
@@ -320,71 +364,92 @@ class LogAnalyzer {
   }
 
   async analyzeLogFile() {
-    const file = document.getElementById("logFile").files[0];
-    if (!file) return;
+    if (this.selectedFiles.length === 0) {
+      alert("Please select one or more log files to analyze.");
+      return;
+    }
     this.showLoading(true);
-    this.dailyStats = {};
+    this.dailyStats = {}; // Reset stats ONCE before processing all files.
+
     try {
-      await this.processFileLineByLine(file);
+      const totalSize = this.selectedFiles.reduce((sum, file) => sum + file.size, 0);
+      let totalBytesProcessed = 0;
+
+      // Define a callback to update the overall progress
+      const progressCallback = (chunkSize) => {
+        totalBytesProcessed += chunkSize;
+        const progress = totalSize > 0 ? Math.min((totalBytesProcessed / totalSize) * 80, 80) : 0;
+        this.updateProgress(progress);
+      };
+
+      // CRITICAL FIX: Use a for...of loop to process files sequentially
+      let fileCounter = 1;
+      for (const file of this.selectedFiles) {
+        document.getElementById("loadingStatus").textContent = `Processing file ${fileCounter} of ${this.selectedFiles.length}: ${file.name}`;
+        await this.processFileLineByLine(file, progressCallback);
+        fileCounter++;
+      }
+
       const dateKeys = Object.keys(this.dailyStats).sort();
-      if(dateKeys.length === 0) {
-        alert("No valid log entries found. Please check the file format.");
+      if (dateKeys.length === 0) {
+        alert("No valid log entries found in the selected file(s). Check file format and exclusion rules.");
+        this.showLoading(false);
         return;
       }
+
       const minDate = new Date(dateKeys[0]);
       const maxDate = new Date(dateKeys[dateKeys.length - 1]);
+
       this.fullFileAnalysis = this.aggregateStatsForRange(minDate, maxDate);
       this.currentAnalysis = this.fullFileAnalysis;
+
       document.getElementById("loadingStatus").textContent = "Generating analysis...";
-      this.updateProgress(90);
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
       this.setupDateRangeControls(minDate, maxDate);
       this.displayResults(this.currentAnalysis);
       this.updateProgress(100);
+
     } catch (error) {
-      console.error("Error analyzing log file:", error);
-      alert(`Error analyzing log file: ${error.message}.`);
+      console.error("Error analyzing log files:", error);
+      alert(`Error analyzing log files: ${error.message}.`);
     } finally {
       this.showLoading(false);
     }
   }
 
-  async processFileLineByLine(file) {
-    const chunkSize = 64 * 1024;
+  async processFileLineByLine(file, progressCallback) {
+    const chunkSize = 64 * 1024 * 1024; // 64MB chunks for performance
     let offset = 0;
     let buffer = "";
-    let processedLines = 0;
     const logRegex = /^(\S+) \S+ \S+ \[([^\]]+)\] "(\S+) ([^"]*) HTTP\/[\d.]+" (\d+) (\d+|-) "([^"]*)" "([^"]*)"/;
+
     while (offset < file.size) {
       const chunk = file.slice(offset, offset + chunkSize);
-      const text = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = (e) => resolve(e.target.result);
-        reader.onerror = reject;
-        reader.readAsText(chunk);
-      });
+
+      // CRITICAL FIX: Use the modern, simpler, more reliable way to read a file chunk
+      const text = await chunk.text();
+
+      progressCallback(chunk.size); // Report progress for this chunk
+
       buffer += text;
       offset += chunkSize;
       const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
+      buffer = lines.pop() || ""; // The last line might be incomplete, so save it
+
       for (const line of lines) {
-        if (line.trim()) {
-          this.processLogLine(line.trim(), logRegex);
-          processedLines++;
-          if (processedLines % 1000 === 0) {
-            const progress = Math.min((offset / file.size) * 80, 80);
-            this.updateProgress(progress);
-            document.getElementById("loadingStatus").textContent = `Processed ${processedLines.toLocaleString()} entries...`;
-            await new Promise((resolve) => setTimeout(resolve, 1));
-          }
-        }
+        if (line) this.processLogLine(line, logRegex);
       }
+      // Give the browser a moment to breathe during large file processing
+      await new Promise(resolve => setTimeout(resolve, 1));
     }
-    if (buffer.trim()) this.processLogLine(buffer.trim(), logRegex);
-    this.updateProgress(80);
+    // Process any remaining text in the buffer
+    if (buffer) this.processLogLine(buffer, logRegex);
   }
 
-   addRejectionRuleRow(value = '') {
+  // Make sure you have the rest of your LogAnalyzer class methods here...
+  // processLogLine, updateDailyStats, aggregateStatsForRange, all createChart/createTable methods, etc.
+  addRejectionRuleRow(value = '') {
     const container = document.getElementById('rejectionRulesContainer');
     const row = document.createElement('div');
     row.className = 'rejection-rule-row';
@@ -409,10 +474,10 @@ class LogAnalyzer {
 
     const [, , , , urlmatch] = match; // Only grab the URL for the check
     for (const pattern of this.rejectionPatterns) {
-        // If the URL starts with any of the rejection patterns, stop processing this line.
-        if (pattern && urlmatch.startsWith(pattern)) {
-            return; 
-        }
+      // If the URL starts with any of the rejection patterns, stop processing this line.
+      if (pattern && urlmatch.startsWith(pattern)) {
+        return;
+      }
     }
 
     const [, ip, timestamp, method, url, status, size, referer, userAgent] = match;
@@ -455,7 +520,7 @@ class LogAnalyzer {
       dayStats.botStats[botInfo.name].count++;
       dayStats.botStats[botInfo.name].lastSeen = entry.timestamp;
       if (!dayStats.botUrlHits[entry.url]) {
-          dayStats.botUrlHits[entry.url] = {};
+        dayStats.botUrlHits[entry.url] = {};
       }
       dayStats.botUrlHits[entry.url][botInfo.name] = (dayStats.botUrlHits[entry.url][botInfo.name] || 0) + 1;
     } else {
@@ -463,13 +528,13 @@ class LogAnalyzer {
       let referrerDomain = 'Direct';
       // Only parse valid, external http/https referrers
       if (entry.referer && entry.referer.startsWith('http')) {
-          try {
-              const referrerUrl = new URL(entry.referer);
-              referrerDomain = referrerUrl.hostname;
-          } catch (e) { /* Ignore invalid URLs */ }
+        try {
+          const referrerUrl = new URL(entry.referer);
+          referrerDomain = referrerUrl.hostname;
+        } catch (e) { /* Ignore invalid URLs */ }
       }
       if (!dayStats.humanReferrers[entry.url]) {
-          dayStats.humanReferrers[entry.url] = {};
+        dayStats.humanReferrers[entry.url] = {};
       }
       dayStats.humanReferrers[entry.url][referrerDomain] = (dayStats.humanReferrers[entry.url][referrerDomain] || 0) + 1;
     }
@@ -513,16 +578,16 @@ class LogAnalyzer {
           }
         }
         for (const [url, bots] of Object.entries(dayStats.botUrlHits)) {
-            if (!result.botUrlHits[url]) result.botUrlHits[url] = {};
-            for (const [botName, count] of Object.entries(bots)) {
-                result.botUrlHits[url][botName] = (result.botUrlHits[url][botName] || 0) + count;
-            }
+          if (!result.botUrlHits[url]) result.botUrlHits[url] = {};
+          for (const [botName, count] of Object.entries(bots)) {
+            result.botUrlHits[url][botName] = (result.botUrlHits[url][botName] || 0) + count;
+          }
         }
         for (const [url, referrers] of Object.entries(dayStats.humanReferrers)) {
-            if (!result.humanReferrers[url]) result.humanReferrers[url] = {};
-            for (const [referrer, count] of Object.entries(referrers)) {
-                result.humanReferrers[url][referrer] = (result.humanReferrers[url][referrer] || 0) + count;
-            }
+          if (!result.humanReferrers[url]) result.humanReferrers[url] = {};
+          for (const [referrer, count] of Object.entries(referrers)) {
+            result.humanReferrers[url][referrer] = (result.humanReferrers[url][referrer] || 0) + count;
+          }
         }
       }
     }
@@ -626,10 +691,10 @@ class LogAnalyzer {
     const dailyDataForRange = {};
     const dateKeys = Object.keys(this.dailyStats).sort();
     for (const dateKey of dateKeys) {
-        const dayDate = new Date(dateKey + 'T00:00:00.000Z');
-        if (dayDate >= data.minDate && dayDate <= data.maxDate) {
-            dailyDataForRange[dateKey] = this.dailyStats[dateKey];
-        }
+      const dayDate = new Date(dateKey + 'T00:00:00.000Z');
+      if (dayDate >= data.minDate && dayDate <= data.maxDate) {
+        dailyDataForRange[dateKey] = this.dailyStats[dateKey];
+      }
     }
     this.createResponseCodesChart(dailyDataForRange);
     this.createEventsChart(dailyDataForRange);
@@ -637,15 +702,15 @@ class LogAnalyzer {
     this.createUrlsChart(data.urlCounts);
     this.createBotDistributionChart(data.botStats);
   }
-  
+
   createResponseCodesChart(dailyData) {
     const ctx = document.getElementById("responseCodesChart").getContext("2d");
     const dates = Object.keys(dailyData).sort();
     const datasets = [
-        { label: "Success (2xx)", data: dates.map(date => dailyData[date]?.statusCodes[2] || 0), borderColor: "#27ae60", tension: 0.1 },
-        { label: "Redirection (3xx)", data: dates.map(date => dailyData[date]?.statusCodes[3] || 0), borderColor: "#f39c12", tension: 0.1 },
-        { label: "Client Error (4xx)", data: dates.map(date => dailyData[date]?.statusCodes[4] || 0), borderColor: "#e74c3c", tension: 0.1 },
-        { label: "Server Error (5xx)", data: dates.map(date => dailyData[date]?.statusCodes[5] || 0), borderColor: "#8e44ad", tension: 0.1 },
+      { label: "Success (2xx)", data: dates.map(date => dailyData[date]?.statusCodes[2] || 0), borderColor: "#27ae60", tension: 0.1 },
+      { label: "Redirection (3xx)", data: dates.map(date => dailyData[date]?.statusCodes[3] || 0), borderColor: "#f39c12", tension: 0.1 },
+      { label: "Client Error (4xx)", data: dates.map(date => dailyData[date]?.statusCodes[4] || 0), borderColor: "#e74c3c", tension: 0.1 },
+      { label: "Server Error (5xx)", data: dates.map(date => dailyData[date]?.statusCodes[5] || 0), borderColor: "#8e44ad", tension: 0.1 },
     ];
     this.charts.responseCodes = new Chart(ctx, { type: "line", data: { labels: dates, datasets }, options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } } });
   }
@@ -660,8 +725,8 @@ class LogAnalyzer {
     const ctx = document.getElementById("botActivityChart").getContext("2d");
     const dates = Object.keys(dailyData).sort();
     const datasets = [
-        { label: "Human Traffic", data: dates.map(date => dailyData[date]?.humanRequests || 0), borderColor: "#27ae60", tension: 0.1 },
-        { label: "Bot Traffic", data: dates.map(date => dailyData[date]?.botRequests || 0), borderColor: "#e74c3c", tension: 0.1 }
+      { label: "Human Traffic", data: dates.map(date => dailyData[date]?.humanRequests || 0), borderColor: "#27ae60", tension: 0.1 },
+      { label: "Bot Traffic", data: dates.map(date => dailyData[date]?.botRequests || 0), borderColor: "#e74c3c", tension: 0.1 }
     ];
     this.charts.botActivity = new Chart(ctx, { type: "line", data: { labels: dates, datasets }, options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } } });
   }
@@ -722,127 +787,127 @@ class LogAnalyzer {
 
   // REFACTORED: This is now a generic function for both dropdowns
   updateMultiSelectDisplayText(type) {
-      const display = document.getElementById(`${type}FilterDisplay`);
-      const checkboxContainer = document.getElementById(`${type}FilterCheckboxes`);
-      if (!checkboxContainer || !display) return;
-      const selectedCount = checkboxContainer.querySelectorAll('input:checked').length;
-      const totalCount = checkboxContainer.querySelectorAll('input').length;
-      const noun = type === 'bot' ? 'bots' : 'referrers';
-      if (totalCount === 0) {
-          display.textContent = `No ${noun} detected`;
-      } else if (selectedCount === 0) {
-          display.textContent = `Select ${noun.charAt(0).toUpperCase() + noun.slice(1)}`;
-      } else if (selectedCount === totalCount) {
-          display.textContent = `All ${noun} selected`;
-      } else {
-          display.textContent = `${selectedCount} of ${totalCount} ${noun} selected`;
-      }
+    const display = document.getElementById(`${type}FilterDisplay`);
+    const checkboxContainer = document.getElementById(`${type}FilterCheckboxes`);
+    if (!checkboxContainer || !display) return;
+    const selectedCount = checkboxContainer.querySelectorAll('input:checked').length;
+    const totalCount = checkboxContainer.querySelectorAll('input').length;
+    const noun = type === 'bot' ? 'bots' : 'referrers';
+    if (totalCount === 0) {
+      display.textContent = `No ${noun} detected`;
+    } else if (selectedCount === 0) {
+      display.textContent = `Select ${noun.charAt(0).toUpperCase() + noun.slice(1)}`;
+    } else if (selectedCount === totalCount) {
+      display.textContent = `All ${noun} selected`;
+    } else {
+      display.textContent = `${selectedCount} of ${totalCount} ${noun} selected`;
+    }
   }
 
   populateBotFilterControls(botStats) {
-      const container = document.getElementById("botUrlFilterCheckboxes");
-      container.innerHTML = "";
-      const sortedBots = Object.values(botStats).sort((a, b) => b.count - a.count);
-      if (sortedBots.length === 0) {
-          this.updateMultiSelectDisplayText('bot');
-          return;
-      }
-      const top10Bots = sortedBots.slice(0, 10).map(b => b.name);
-      sortedBots.forEach(bot => {
-          const label = document.createElement('label');
-          const checkbox = document.createElement('input');
-          checkbox.type = 'checkbox';
-          checkbox.value = bot.name;
-          checkbox.checked = top10Bots.includes(bot.name);
-          label.appendChild(checkbox);
-          label.appendChild(document.createTextNode(bot.name));
-          container.appendChild(label);
-      });
+    const container = document.getElementById("botUrlFilterCheckboxes");
+    container.innerHTML = "";
+    const sortedBots = Object.values(botStats).sort((a, b) => b.count - a.count);
+    if (sortedBots.length === 0) {
       this.updateMultiSelectDisplayText('bot');
+      return;
+    }
+    const top10Bots = sortedBots.slice(0, 10).map(b => b.name);
+    sortedBots.forEach(bot => {
+      const label = document.createElement('label');
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.value = bot.name;
+      checkbox.checked = top10Bots.includes(bot.name);
+      label.appendChild(checkbox);
+      label.appendChild(document.createTextNode(bot.name));
+      container.appendChild(label);
+    });
+    this.updateMultiSelectDisplayText('bot');
   }
 
   populateReferrerFilterControls(humanReferrers) {
-      const container = document.getElementById("referrerFilterCheckboxes");
-      container.innerHTML = "";
-      const allReferrers = new Set();
-      const referrerCounts = {};
-      for (const url in humanReferrers) {
-          for (const [referrer, count] of Object.entries(humanReferrers[url])) {
-              allReferrers.add(referrer);
-              referrerCounts[referrer] = (referrerCounts[referrer] || 0) + count;
-          }
+    const container = document.getElementById("referrerFilterCheckboxes");
+    container.innerHTML = "";
+    const allReferrers = new Set();
+    const referrerCounts = {};
+    for (const url in humanReferrers) {
+      for (const [referrer, count] of Object.entries(humanReferrers[url])) {
+        allReferrers.add(referrer);
+        referrerCounts[referrer] = (referrerCounts[referrer] || 0) + count;
       }
-      const sortedReferrers = Array.from(allReferrers).sort((a, b) => {
-          if (a === 'Direct/Internal') return -1;
-          if (b === 'Direct/Internal') return 1;
-          return a.localeCompare(b);
-      });
-      if (sortedReferrers.length === 0) {
-          this.updateMultiSelectDisplayText('referrer');
-          return;
-      }
-      const top5External = Object.entries(referrerCounts).filter(([ref]) => ref !== 'Direct/Internal').sort(([,a],[,b]) => b-a).slice(0, 5).map(([ref]) => ref);
-      sortedReferrers.forEach(referrer => {
-          const label = document.createElement('label');
-          const checkbox = document.createElement('input');
-          checkbox.type = 'checkbox';
-          checkbox.value = referrer;
-          checkbox.checked = referrer === 'Direct/Internal' || top5External.includes(referrer);
-          label.appendChild(checkbox);
-          label.appendChild(document.createTextNode(referrer));
-          container.appendChild(label);
-      });
+    }
+    const sortedReferrers = Array.from(allReferrers).sort((a, b) => {
+      if (a === 'Direct/Internal') return -1;
+      if (b === 'Direct/Internal') return 1;
+      return a.localeCompare(b);
+    });
+    if (sortedReferrers.length === 0) {
       this.updateMultiSelectDisplayText('referrer');
+      return;
+    }
+    const top5External = Object.entries(referrerCounts).filter(([ref]) => ref !== 'Direct/Internal').sort(([, a], [, b]) => b - a).slice(0, 5).map(([ref]) => ref);
+    sortedReferrers.forEach(referrer => {
+      const label = document.createElement('label');
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.value = referrer;
+      checkbox.checked = referrer === 'Direct/Internal' || top5External.includes(referrer);
+      label.appendChild(checkbox);
+      label.appendChild(document.createTextNode(referrer));
+      container.appendChild(label);
+    });
+    this.updateMultiSelectDisplayText('referrer');
   }
 
   createBotUrlHitsTable(botUrlHits) {
-      const thead = document.querySelector("#botUrlHitsTable thead");
-      const tbody = document.querySelector("#botUrlHitsTable tbody");
-      thead.innerHTML = "";
-      tbody.innerHTML = "";
-      const selectedBots = Array.from(document.querySelectorAll('#botUrlFilterCheckboxes input:checked')).map(cb => cb.value);
-      if (selectedBots.length === 0) {
-          tbody.innerHTML = `<tr class="table-placeholder"><td colspan="1">Select one or more bots to display data.</td></tr>`;
-          return;
+    const thead = document.querySelector("#botUrlHitsTable thead");
+    const tbody = document.querySelector("#botUrlHitsTable tbody");
+    thead.innerHTML = "";
+    tbody.innerHTML = "";
+    const selectedBots = Array.from(document.querySelectorAll('#botUrlFilterCheckboxes input:checked')).map(cb => cb.value);
+    if (selectedBots.length === 0) {
+      tbody.innerHTML = `<tr class="table-placeholder"><td colspan="1">Select one or more bots to display data.</td></tr>`;
+      return;
+    }
+    const headerRow = thead.insertRow();
+    headerRow.innerHTML = `<th>URL</th>`;
+    selectedBots.forEach(botName => {
+      headerRow.innerHTML += `<th>${botName}</th>`;
+    });
+    headerRow.innerHTML += `<th>Total</th>`;
+    let dataForTable = [];
+    for (const [url, hitsByBot] of Object.entries(botUrlHits)) {
+      let totalHitsForSelectedBots = 0;
+      let hasHitsFromSelected = false;
+      const botCounts = {};
+      for (const botName of selectedBots) {
+        const count = hitsByBot[botName] || 0;
+        if (count > 0) {
+          hasHitsFromSelected = true;
+          totalHitsForSelectedBots += count;
+          botCounts[botName] = count;
+        }
       }
-      const headerRow = thead.insertRow();
-      headerRow.innerHTML = `<th>URL</th>`;
+      if (hasHitsFromSelected) {
+        dataForTable.push({ url, totalHits: totalHitsForSelectedBots, botCounts });
+      }
+    }
+    dataForTable.sort((a, b) => b.totalHits - a.totalHits);
+    const top100 = dataForTable.slice(0, 100);
+    if (top100.length === 0) {
+      tbody.innerHTML = `<tr class="table-placeholder"><td colspan="${selectedBots.length + 2}">No hits found for the selected bots in this period.</td></tr>`;
+      return;
+    }
+    top100.forEach(rowData => {
+      const row = tbody.insertRow();
+      let rowHTML = `<td title="${rowData.url}">${rowData.url.length > 70 ? `${rowData.url.substring(0, 70)}...` : rowData.url}</td>`;
       selectedBots.forEach(botName => {
-          headerRow.innerHTML += `<th>${botName}</th>`;
+        rowHTML += `<td>${(rowData.botCounts[botName] || 0).toLocaleString()}</td>`;
       });
-      headerRow.innerHTML += `<th>Total</th>`;
-      let dataForTable = [];
-      for (const [url, hitsByBot] of Object.entries(botUrlHits)) {
-          let totalHitsForSelectedBots = 0;
-          let hasHitsFromSelected = false;
-          const botCounts = {};
-          for(const botName of selectedBots) {
-              const count = hitsByBot[botName] || 0;
-              if (count > 0) {
-                  hasHitsFromSelected = true;
-                  totalHitsForSelectedBots += count;
-                  botCounts[botName] = count;
-              }
-          }
-          if(hasHitsFromSelected) {
-              dataForTable.push({ url, totalHits: totalHitsForSelectedBots, botCounts });
-          }
-      }
-      dataForTable.sort((a,b) => b.totalHits - a.totalHits);
-      const top100 = dataForTable.slice(0, 100);
-      if (top100.length === 0) {
-        tbody.innerHTML = `<tr class="table-placeholder"><td colspan="${selectedBots.length + 2}">No hits found for the selected bots in this period.</td></tr>`;
-        return;
-      }
-      top100.forEach(rowData => {
-          const row = tbody.insertRow();
-          let rowHTML = `<td title="${rowData.url}">${rowData.url.length > 70 ? `${rowData.url.substring(0, 70)}...` : rowData.url}</td>`;
-          selectedBots.forEach(botName => {
-              rowHTML += `<td>${(rowData.botCounts[botName] || 0).toLocaleString()}</td>`;
-          });
-          rowHTML += `<td><strong>${rowData.totalHits.toLocaleString()}</strong></td>`;
-          row.innerHTML = rowHTML;
-      });
+      rowHTML += `<td><strong>${rowData.totalHits.toLocaleString()}</strong></td>`;
+      row.innerHTML = rowHTML;
+    });
   }
 
   createTrafficSourceTable(humanReferrers) {
@@ -852,46 +917,46 @@ class LogAnalyzer {
     tbody.innerHTML = "";
     const selectedReferrers = Array.from(document.querySelectorAll('#referrerFilterCheckboxes input:checked')).map(cb => cb.value);
     if (selectedReferrers.length === 0) {
-        tbody.innerHTML = `<tr class="table-placeholder"><td colspan="1">Select one or more referrers to display data.</td></tr>`;
-        return;
+      tbody.innerHTML = `<tr class="table-placeholder"><td colspan="1">Select one or more referrers to display data.</td></tr>`;
+      return;
     }
     const headerRow = thead.insertRow();
     headerRow.innerHTML = `<th>Destination URL</th>`;
     selectedReferrers.forEach(ref => {
-        headerRow.innerHTML += `<th>${ref}</th>`;
+      headerRow.innerHTML += `<th>${ref}</th>`;
     });
     headerRow.innerHTML += `<th>Total</th>`;
     let dataForTable = [];
     for (const [url, referrers] of Object.entries(humanReferrers)) {
-        let totalHitsForSelected = 0;
-        let hasHitsFromSelected = false;
-        const referrerCounts = {};
-        for(const ref of selectedReferrers) {
-            const count = referrers[ref] || 0;
-            if (count > 0) {
-                hasHitsFromSelected = true;
-                totalHitsForSelected += count;
-                referrerCounts[ref] = count;
-            }
+      let totalHitsForSelected = 0;
+      let hasHitsFromSelected = false;
+      const referrerCounts = {};
+      for (const ref of selectedReferrers) {
+        const count = referrers[ref] || 0;
+        if (count > 0) {
+          hasHitsFromSelected = true;
+          totalHitsForSelected += count;
+          referrerCounts[ref] = count;
         }
-        if(hasHitsFromSelected) {
-            dataForTable.push({ url, totalHits: totalHitsForSelected, referrerCounts });
-        }
+      }
+      if (hasHitsFromSelected) {
+        dataForTable.push({ url, totalHits: totalHitsForSelected, referrerCounts });
+      }
     }
-    dataForTable.sort((a,b) => b.totalHits - a.totalHits);
+    dataForTable.sort((a, b) => b.totalHits - a.totalHits);
     const top100 = dataForTable.slice(0, 100);
     if (top100.length === 0) {
       tbody.innerHTML = `<tr class="table-placeholder"><td colspan="${selectedReferrers.length + 2}">No traffic found from the selected referrers in this period.</td></tr>`;
       return;
     }
     top100.forEach(rowData => {
-        const row = tbody.insertRow();
-        let rowHTML = `<td title="${rowData.url}">${rowData.url.length > 50 ? `${rowData.url.substring(0, 50)}...` : rowData.url}</td>`;
-        selectedReferrers.forEach(ref => {
-            rowHTML += `<td>${(rowData.referrerCounts[ref] || 0).toLocaleString()}</td>`;
-        });
-        rowHTML += `<td><strong>${rowData.totalHits.toLocaleString()}</strong></td>`;
-        row.innerHTML = rowHTML;
+      const row = tbody.insertRow();
+      let rowHTML = `<td title="${rowData.url}">${rowData.url.length > 50 ? `${rowData.url.substring(0, 50)}...` : rowData.url}</td>`;
+      selectedReferrers.forEach(ref => {
+        rowHTML += `<td>${(rowData.referrerCounts[ref] || 0).toLocaleString()}</td>`;
+      });
+      rowHTML += `<td><strong>${rowData.totalHits.toLocaleString()}</strong></td>`;
+      row.innerHTML = rowHTML;
     });
   }
 
@@ -929,8 +994,8 @@ class LogAnalyzer {
     const startDate = new Date(document.getElementById("startDate").value + 'T00:00:00.000Z');
     const endDate = new Date(document.getElementById("endDate").value + 'T00:00:00.000Z');
     if (endDate < startDate) {
-        alert("End date cannot be earlier than start date.");
-        return;
+      alert("End date cannot be earlier than start date.");
+      return;
     }
     this.currentAnalysis = this.aggregateStatsForRange(startDate, endDate);
     this.displayResults(this.currentAnalysis);
@@ -966,23 +1031,23 @@ class LogAnalyzer {
 
   exportFullReport() {
     if (!this.currentAnalysis) {
-        alert("Please analyze a file first.");
-        return;
+      alert("Please analyze a file first.");
+      return;
     }
     const reportData = {
-        summary: {
-            totalRequests: this.currentAnalysis.totalEntries,
-            botTraffic: this.currentAnalysis.totalEntries > 0 ? `${((this.currentAnalysis.botRequests / this.currentAnalysis.totalEntries) * 100).toFixed(1)}%` : "0%",
-            uniqueIPs: Object.keys(this.currentAnalysis.ipCounts).length,
-            dateRange: {
-                start: this.currentAnalysis.minDate.toISOString(),
-                end: this.currentAnalysis.maxDate.toISOString(),
-            },
+      summary: {
+        totalRequests: this.currentAnalysis.totalEntries,
+        botTraffic: this.currentAnalysis.totalEntries > 0 ? `${((this.currentAnalysis.botRequests / this.currentAnalysis.totalEntries) * 100).toFixed(1)}%` : "0%",
+        uniqueIPs: Object.keys(this.currentAnalysis.ipCounts).length,
+        dateRange: {
+          start: this.currentAnalysis.minDate.toISOString(),
+          end: this.currentAnalysis.maxDate.toISOString(),
         },
-        botAnalysis: Object.values(this.currentAnalysis.botStats).sort((a, b) => b.count - a.count),
-        topUrls: Object.entries(this.currentAnalysis.urlCounts).sort(([, a], [, b]) => b - a).slice(0, 50).map(([url, count]) => ({ url, count })),
-        topIPs: Object.entries(this.currentAnalysis.ipCounts).sort(([, a], [, b]) => b - a).slice(0, 50).map(([ip, count]) => ({ ip, count })),
-        generatedAt: new Date().toISOString(),
+      },
+      botAnalysis: Object.values(this.currentAnalysis.botStats).sort((a, b) => b.count - a.count),
+      topUrls: Object.entries(this.currentAnalysis.urlCounts).sort(([, a], [, b]) => b - a).slice(0, 50).map(([url, count]) => ({ url, count })),
+      topIPs: Object.entries(this.currentAnalysis.ipCounts).sort(([, a], [, b]) => b - a).slice(0, 50).map(([ip, count]) => ({ ip, count })),
+      generatedAt: new Date().toISOString(),
     };
     const blob = new Blob([JSON.stringify(reportData, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -993,18 +1058,18 @@ class LogAnalyzer {
     URL.revokeObjectURL(url);
   }
 
-   setupFilterSearch(searchInput, checkboxContainer) {
+  setupFilterSearch(searchInput, checkboxContainer) {
     searchInput.addEventListener('keyup', (e) => {
-        const searchTerm = e.target.value.toLowerCase();
-        const labels = checkboxContainer.querySelectorAll('label');
-        labels.forEach(label => {
-            const labelText = label.textContent.toLowerCase();
-            if (labelText.includes(searchTerm)) {
-                label.style.display = 'flex'; // Use 'flex' to match the label's style
-            } else {
-                label.style.display = 'none';
-            }
-        });
+      const searchTerm = e.target.value.toLowerCase();
+      const labels = checkboxContainer.querySelectorAll('label');
+      labels.forEach(label => {
+        const labelText = label.textContent.toLowerCase();
+        if (labelText.includes(searchTerm)) {
+          label.style.display = 'flex'; // Use 'flex' to match the label's style
+        } else {
+          label.style.display = 'none';
+        }
+      });
     });
   }
 }

@@ -115,7 +115,7 @@ body {
   position: relative;
   width: 100%;
   max-width: 500px;
-  height: 150px;
+  height: 200px;
   border: 3px dashed #bdc3c7;
   border-radius: 12px;
   background: #f8f9fa;
@@ -1198,4 +1198,77 @@ tr:hover {
 }
 .modal-btn.secondary:hover {
   background-color: #95a5a6;
+}
+
+#fileListContainer {
+  width: 100%;
+  max-width: 500px;
+  max-height: 200px; /* Give it a max height for many files */
+  overflow-y: auto;
+  padding: 10px;
+  background-color: #f8f9fa;
+  border-radius: 12px;
+}
+
+.file-list-item {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  background-color: #fff;
+  border: 1px solid #e1e8ed;
+  border-radius: 6px;
+  margin-bottom: 8px;
+}
+.file-list-item:last-child {
+  margin-bottom: 0;
+}
+
+.file-list-item .file-icon {
+  font-size: 1.5rem;
+  margin-right: 12px;
+  color: #34495e;
+}
+
+.file-list-item .file-details {
+  flex-grow: 1;
+  min-width: 0;
+}
+
+.file-list-item .file-name {
+  font-weight: 600;
+  color: #2c3e50;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 2px;
+}
+
+.file-list-item .file-size {
+  color: #7f8c8d;
+  font-size: 0.85rem;
+}
+
+.file-list-item .remove-file {
+  background: #e74c3c;
+  color: white;
+  border: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 0.8rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.3s;
+  flex-shrink: 0;
+  margin-left: 10px;
+}
+
+.file-list-item .remove-file:hover {
+  background: #c0392b;
+}
+
+.file-input {
+  display: none;
 }

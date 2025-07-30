@@ -34,7 +34,7 @@
                         <p class="dropbox-subtext">or click to browse (.log, .txt files)</p>
                         <input type="file" id="logFile" accept=".log,.txt" class="file-input" multiple>
                     </div>
-                    <!-- REWORKED: Container for the file list -->
+                    <!-- Container for the file list -->
                     <div id="fileListContainer" class="hidden">
                         <!-- A list of selected files will be dynamically added here -->
                     </div>
@@ -84,6 +84,7 @@
                     <div class="date-range-buttons">
                         <button id="applyDateRange" class="apply-btn">Apply Filter</button>
                         <button id="resetDateRange" class="reset-btn">Reset</button>
+                        <button id="showComparison" class="comparison-btn">📊 Compare Periods</button>
                     </div>
                     <div class="quick-filters">
                         <button class="quick-filter-btn" data-days="1">Today</button>
@@ -95,6 +96,203 @@
                 <div class="filtered-info hidden" id="filteredInfo">
                     <span id="filteredEntries">0 entries</span> shown from
                     <span id="filteredDateRange">date range</span>
+                </div>
+            </div>
+
+            <!-- Comparison Section -->
+            <div id="comparisonSection" class="comparison-section hidden">
+                <div class="comparison-header">
+                    <h3>📈 Period Comparison</h3>
+                    <button id="hideComparison" class="close-comparison-btn">✕</button>
+                </div>
+                
+                <div class="comparison-controls">
+                    <div class="comparison-periods">
+                        <div class="period-selector">
+                            <h4>Period A</h4>
+                            <div class="period-inputs">
+                                <input type="date" id="periodAStart" class="date-input">
+                                <span>to</span>
+                                <input type="date" id="periodAEnd" class="date-input">
+                            </div>
+                            <div class="period-presets">
+                                <button class="preset-btn" data-period="A" data-days="7">Last 7 days</button>
+                                <button class="preset-btn" data-period="A" data-days="30">Last 30 days</button>
+                            </div>
+                        </div>
+                        
+                        <div class="period-selector">
+                            <h4>Period B (Compare to)</h4>
+                            <div class="period-inputs">
+                                <input type="date" id="periodBStart" class="date-input">
+                                <span>to</span>
+                                <input type="date" id="periodBEnd" class="date-input">
+                            </div>
+                            <div class="period-presets">
+                                <button class="preset-btn" data-period="B" data-days="7">Previous 7 days</button>
+                                <button class="preset-btn" data-period="B" data-days="30">Previous 30 days</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <button id="runComparison" class="run-comparison-btn">Run Comparison</button>
+                </div>
+
+                <!-- Comparison Results -->
+                <div id="comparisonResults" class="comparison-results hidden">
+                    <div class="comparison-summary">
+                        <div class="period-info">
+                            <div class="period-card period-a">
+                                <h4>Period A</h4>
+                                <div class="period-dates" id="periodADates"></div>
+                                <div class="period-duration" id="periodADuration"></div>
+                            </div>
+                            <div class="period-card period-b">
+                                <h4>Period B</h4>
+                                <div class="period-dates" id="periodBDates"></div>
+                                <div class="period-duration" id="periodBDuration"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Comparison Metrics -->
+                    <div class="comparison-metrics">
+                        <div class="metric-card">
+                            <div class="metric-label">Total Requests</div>
+                            <div class="metric-values">
+                                <span class="metric-a" id="compTotalRequestsA">0</span>
+                                <span class="metric-b" id="compTotalRequestsB">0</span>
+                            </div>
+                            <div class="metric-change" id="compTotalRequestsChange">0%</div>
+                        </div>
+
+                        <div class="metric-card">
+                            <div class="metric-label">Unique URLs</div>
+                            <div class="metric-values">
+                                <span class="metric-a" id="compUniqueUrlsA">0</span>
+                                <span class="metric-b" id="compUniqueUrlsB">0</span>
+                            </div>
+                            <div class="metric-change" id="compUniqueUrlsChange">0%</div>
+                        </div>
+
+                        <div class="metric-card">
+                            <div class="metric-label">Bot Traffic</div>
+                            <div class="metric-values">
+                                <span class="metric-a" id="compBotTrafficA">0</span>
+                                <span class="metric-b" id="compBotTrafficB">0</span>
+                            </div>
+                            <div class="metric-change" id="compBotTrafficChange">0%</div>
+                        </div>
+
+                        <div class="metric-card">
+                            <div class="metric-label">Human Traffic</div>
+                            <div class="metric-values">
+                                <span class="metric-a" id="compHumanTrafficA">0</span>
+                                <span class="metric-b" id="compHumanTrafficB">0</span>
+                            </div>
+                            <div class="metric-change" id="compHumanTrafficChange">0%</div>
+                        </div>
+
+                        <div class="metric-card">
+                            <div class="metric-label">Total Bytes</div>
+                            <div class="metric-values">
+                                <span class="metric-a" id="compTotalBytesA">0</span>
+                                <span class="metric-b" id="compTotalBytesB">0</span>
+                            </div>
+                            <div class="metric-change" id="compTotalBytesChange">0%</div>
+                        </div>
+
+                        <div class="metric-card">
+                            <div class="metric-label">Error Rate</div>
+                            <div class="metric-values">
+                                <span class="metric-a" id="compErrorRateA">0%</span>
+                                <span class="metric-b" id="compErrorRateB">0%</span>
+                            </div>
+                            <div class="metric-change" id="compErrorRateChange">0%</div>
+                        </div>
+                    </div>
+
+                    <!-- Comparison Charts -->
+                    <div class="comparison-charts">
+                        <div class="chart-container">
+                            <div class="chart-header">
+                                <h3>Daily Traffic Comparison</h3>
+                            </div>
+                            <canvas id="comparisonTrafficChart"></canvas>
+                        </div>
+
+                        <div class="chart-container">
+                            <div class="chart-header">
+                                <h3>Bot vs Human Traffic Comparison</h3>
+                            </div>
+                            <canvas id="comparisonBotChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- NEW: Comparison Tables -->
+                    <div class="comparison-tables">
+                        <!-- Bot URL Hits Comparison -->
+                        <div class="comparison-table-container">
+                            <div class="chart-header">
+                                <h3>🤖 Bot Hits per URL - Comparison</h3>
+                                <div class="comparison-table-controls">
+                                    <div class="multiselect-dropdown" id="compBotFilterDropdown">
+                                        <div class="multiselect-display" id="compBotFilterDisplay">Select Bots</div>
+                                        <div class="multiselect-options" id="compBotFilterOptions">
+                                            <div class="multiselect-actions">
+                                                <button class="filter-action-btn" data-action="select-all">Select All</button>
+                                                <button class="filter-action-btn" data-action="deselect-all">Deselect All</button>
+                                            </div>
+                                            <div class="multiselect-search-container">
+                                                <input type="text" id="compBotFilterSearch" class="multiselect-search-input" placeholder="Search bots...">
+                                            </div>
+                                            <div class="multiselect-checkboxes" id="compBotFilterCheckboxes">
+                                                <!-- Checkboxes will be populated here -->
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <button class="export-btn" data-table="comparison-bot-hits">Export CSV</button>
+                                </div>
+                            </div>
+                            <div class="table-wrapper">
+                                <table id="comparisonBotHitsTable">
+                                    <thead></thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Human Traffic Sources Comparison -->
+                        <div class="comparison-table-container">
+                            <div class="chart-header">
+                                <h3>👥 Human Traffic Sources - Comparison</h3>
+                                <div class="comparison-table-controls">
+                                    <div class="multiselect-dropdown" id="compReferrerFilterDropdown">
+                                        <div class="multiselect-display" id="compReferrerFilterDisplay">Select Referrers</div>
+                                        <div class="multiselect-options" id="compReferrerFilterOptions">
+                                            <div class="multiselect-actions">
+                                                <button class="filter-action-btn" data-action="select-all">Select All</button>
+                                                <button class="filter-action-btn" data-action="deselect-all">Deselect All</button>
+                                            </div>
+                                            <div class="multiselect-search-container">
+                                                <input type="text" id="compReferrerFilterSearch" class="multiselect-search-input" placeholder="Search referrers...">
+                                            </div>
+                                            <div class="multiselect-checkboxes" id="compReferrerFilterCheckboxes">
+                                                <!-- Checkboxes will be populated here -->
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <button class="export-btn" data-table="comparison-traffic-sources">Export CSV</button>
+                                </div>
+                            </div>
+                            <div class="table-wrapper">
+                                <table id="comparisonTrafficSourcesTable">
+                                    <thead></thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -349,7 +547,7 @@
                         </table>
                     </div>
                 </div>
-                <!-- START: Modified Bot URL Hits Table -->
+                <!-- Bot URL Hits Table -->
                 <div class="interactive-table-card full-width">
                     <div class="chart-header">
                         <h3>Bot Hits per URL</h3>
@@ -380,7 +578,7 @@
                         </table>
                     </div>
                 </div>
-                <!-- END: Modified Bot URL Hits Table -->
+                
                 <div class="interactive-table-card full-width">
                     <div class="chart-header">
                         <h3>Human Traffic Sources</h3>
@@ -414,8 +612,7 @@
             </div>
         </div>
 
-
-        <!-- START: Rejection Rules Modal -->
+        <!-- Rejection Rules Modal -->
         <div id="rejectionModal" class="modal-overlay hidden">
             <div class="modal-content">
                 <div class="modal-header">
@@ -428,20 +625,17 @@
                     </p>
                     <div id="rejectionRulesContainer">
                         <!-- Dynamic rejection rules will be added here -->
-                        <div id="rejectionRulesContainer">
-                            <!-- Dynamic rejection rules will be added here -->
-                            <div class="rejection-rule-row">
-                                <input type="text" placeholder="/path/to/exclude/" value="/wp-">
-                                <button class="remove-rule-btn">−</button>
-                            </div>
-                            <div class="rejection-rule-row">
-                                <input type="text" placeholder="/path/to/exclude/" value="/robots.txt">
-                                <button class="remove-rule-btn">−</button>
-                            </div>
-                            <div class="rejection-rule-row">
-                                <input type="text" placeholder="/path/to/exclude/" value="/sitemaps.xml">
-                                <button class="remove-rule-btn">−</button>
-                            </div>
+                        <div class="rejection-rule-row">
+                            <input type="text" placeholder="/path/to/exclude/" value="/wp-">
+                            <button class="remove-rule-btn">−</button>
+                        </div>
+                        <div class="rejection-rule-row">
+                            <input type="text" placeholder="/path/to/exclude/" value="/robots.txt">
+                            <button class="remove-rule-btn">−</button>
+                        </div>
+                        <div class="rejection-rule-row">
+                            <input type="text" placeholder="/path/to/exclude/" value="/sitemaps.xml">
+                            <button class="remove-rule-btn">−</button>
                         </div>
                     </div>
                     <button id="addRejectionRule" class="add-rule-btn">+ Add Rule</button>
@@ -452,10 +646,7 @@
                 </div>
             </div>
         </div>
-        <!-- END: Rejection Rules Modal -->
     </div>
-
-
 
     <script src="script.js"></script>
 </body>

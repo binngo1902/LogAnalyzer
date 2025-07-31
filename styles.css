@@ -415,6 +415,7 @@ body {
 
 .table-wrapper {
   max-height: 400px;
+  min-height: 300px;
   overflow-y: auto;
 }
 
@@ -1174,6 +1175,7 @@ tr:hover {
   justify-content: space-between;
   gap: 10px;
   white-space: nowrap;
+  color:black;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -1245,6 +1247,7 @@ tr:hover {
   display: flex;
   align-items: center;
   gap: 8px;
+  color: black;
   white-space: nowrap;
 }
 

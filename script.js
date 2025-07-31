@@ -512,7 +512,7 @@ class LogAnalyzer {
     // Sort bots by total requests across both periods
     const sortedBots = bots.sort((a, b) => {
       const aTotal =
-        (this.comparisonData.periodA.botStats[a]?.count || 0) + (this.comparisonData.periodB.botStats[b]?.count || 0)
+        (this.comparisonData.periodA.botStats[a]?.count || 0) + (this.comparisonData.periodB.botStats[a]?.count || 0)
       const bTotal =
         (this.comparisonData.periodA.botStats[b]?.count || 0) + (this.comparisonData.periodB.botStats[b]?.count || 0)
       return bTotal - aTotal
@@ -528,8 +528,10 @@ class LogAnalyzer {
       checkbox.value = bot
       checkbox.checked = top10Bots.includes(bot)
 
+      const textNode = document.createTextNode(` ${bot}`) // Add space before bot name
+
       label.appendChild(checkbox)
-      label.appendChild(document.createTextNode(bot))
+      label.appendChild(textNode)
       container.appendChild(label)
     })
 
@@ -564,8 +566,10 @@ class LogAnalyzer {
       checkbox.value = referrer
       checkbox.checked = defaultSelected.includes(referrer)
 
+      const textNode = document.createTextNode(` ${referrer}`) // Add space before referrer name
+
       label.appendChild(checkbox)
-      label.appendChild(document.createTextNode(referrer))
+      label.appendChild(textNode)
       container.appendChild(label)
     })
 
@@ -1623,59 +1627,76 @@ class LogAnalyzer {
     const container = document.getElementById("botUrlFilterCheckboxes")
     container.innerHTML = ""
     const sortedBots = Object.values(botStats).sort((a, b) => b.count - a.count)
+
     if (sortedBots.length === 0) {
       this.updateMultiSelectDisplayText("bot")
       return
     }
+
     const top10Bots = sortedBots.slice(0, 10).map((b) => b.name)
+
     sortedBots.forEach((bot) => {
       const label = document.createElement("label")
       const checkbox = document.createElement("input")
       checkbox.type = "checkbox"
       checkbox.value = bot.name
       checkbox.checked = top10Bots.includes(bot.name)
+
+      const textNode = document.createTextNode(` ${bot.name}`) // Add space before bot name
+
       label.appendChild(checkbox)
-      label.appendChild(document.createTextNode(bot.name))
+      label.appendChild(textNode)
       container.appendChild(label)
     })
+
     this.updateMultiSelectDisplayText("bot")
   }
 
   populateReferrerFilterControls(humanReferrers) {
     const container = document.getElementById("referrerFilterCheckboxes")
     container.innerHTML = ""
+
     const allReferrers = new Set()
     const referrerCounts = {}
+
     for (const url in humanReferrers) {
       for (const [referrer, count] of Object.entries(humanReferrers[url])) {
         allReferrers.add(referrer)
         referrerCounts[referrer] = (referrerCounts[referrer] || 0) + count
       }
     }
+
     const sortedReferrers = Array.from(allReferrers).sort((a, b) => {
       if (a === "Direct") return -1
       if (b === "Direct") return 1
       return a.localeCompare(b)
     })
+
     if (sortedReferrers.length === 0) {
       this.updateMultiSelectDisplayText("referrer")
       return
     }
+
     const top5External = Object.entries(referrerCounts)
       .filter(([ref]) => ref !== "Direct")
       .sort(([, a], [, b]) => b - a)
       .slice(0, 5)
       .map(([ref]) => ref)
+
     sortedReferrers.forEach((referrer) => {
       const label = document.createElement("label")
       const checkbox = document.createElement("input")
       checkbox.type = "checkbox"
       checkbox.value = referrer
       checkbox.checked = referrer === "Direct" || top5External.includes(referrer)
+
+      const textNode = document.createTextNode(` ${referrer}`) // Add space before referrer name
+
       label.appendChild(checkbox)
-      label.appendChild(document.createTextNode(referrer))
+      label.appendChild(textNode)
       container.appendChild(label)
     })
+
     this.updateMultiSelectDisplayText("referrer")
   }
 

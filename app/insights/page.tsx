@@ -6,96 +6,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Search, Filter, Calendar, TrendingUp, FileText, Star, Clock, User } from "lucide-react"
+import { Search, Calendar, TrendingUp, FileText, Star, Clock, User } from "lucide-react"
 import Link from "next/link"
-
-interface BlogPost {
-  id: string
-  title: string
-  excerpt: string
-  category: 'guides' | 'trends' | 'news'
-  author: string
-  publishDate: string
-  readTime: string
-  featured: boolean
-  tags: string[]
-}
-
-const mockBlogPosts: BlogPost[] = [
-  {
-    id: '1',
-    title: 'Complete Guide to Server Log Analysis for SEO',
-    excerpt: 'Learn how to analyze server logs to identify crawl issues, optimize crawl budget, and improve your site\'s SEO performance.',
-    category: 'guides',
-    author: 'LogInsight Team',
-    publishDate: '2025-09-01',
-    readTime: '8 min read',
-    featured: true,
-    tags: ['SEO', 'Log Analysis', 'Technical SEO']
-  },
-  {
-    id: '2',
-    title: 'Top SEO Trends to Watch in 2025',
-    excerpt: 'Discover the latest SEO trends and algorithm updates that will shape search engine optimization strategies this year.',
-    category: 'trends',
-    author: 'Sarah Johnson',
-    publishDate: '2025-08-28',
-    readTime: '6 min read',
-    featured: true,
-    tags: ['SEO Trends', '2025', 'Algorithm Updates']
-  },
-  {
-    id: '3',
-    title: 'Google Announces New Core Web Vitals Update',
-    excerpt: 'Google has announced significant changes to Core Web Vitals metrics that will impact search rankings starting next month.',
-    category: 'news',
-    author: 'Mike Chen',
-    publishDate: '2025-08-25',
-    readTime: '4 min read',
-    featured: false,
-    tags: ['Google', 'Core Web Vitals', 'Page Speed']
-  },
-  {
-    id: '4',
-    title: 'How to Optimize Crawl Budget for Large Websites',
-    excerpt: 'Best practices for managing crawl budget on enterprise websites with millions of pages.',
-    category: 'guides',
-    author: 'Emma Davis',
-    publishDate: '2025-08-22',
-    readTime: '10 min read',
-    featured: false,
-    tags: ['Crawl Budget', 'Enterprise SEO', 'Technical SEO']
-  },
-  {
-    id: '5',
-    title: 'AI-Powered SEO Tools: The Future is Here',
-    excerpt: 'Explore how artificial intelligence is revolutionizing SEO analysis and what it means for digital marketers.',
-    category: 'trends',
-    author: 'Alex Rodriguez',
-    publishDate: '2025-08-20',
-    readTime: '7 min read',
-    featured: false,
-    tags: ['AI', 'SEO Tools', 'Machine Learning']
-  },
-  {
-    id: '6',
-    title: 'Understanding Bot Traffic in Your Server Logs',
-    excerpt: 'Learn to identify and analyze different types of bot traffic to improve your site\'s performance and security.',
-    category: 'guides',
-    author: 'LogInsight Team',
-    publishDate: '2025-08-18',
-    readTime: '9 min read',
-    featured: false,
-    tags: ['Bot Traffic', 'Security', 'Log Analysis']
-  }
-]
+import { blogPosts } from "./data"
 
 export default function InsightsPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
   const [selectedTag, setSelectedTag] = useState<string>('all')
 
-  const filteredPosts = mockBlogPosts.filter(post => {
+  const filteredPosts = blogPosts.filter(post => {
     const matchesSearch = post.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          post.excerpt.toLowerCase().includes(searchQuery.toLowerCase())
     const matchesCategory = selectedCategory === 'all' || post.category === selectedCategory
@@ -108,7 +28,7 @@ export default function InsightsPage() {
   const featuredPosts = filteredPosts.filter(post => post.featured)
   const regularPosts = filteredPosts.filter(post => !post.featured)
 
-  const allTags = Array.from(new Set(mockBlogPosts.flatMap(post => post.tags)))
+  const allTags = Array.from(new Set(blogPosts.flatMap(post => post.tags)))
 
   const getCategoryIcon = (category: string) => {
     switch (category) {

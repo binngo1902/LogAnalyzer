@@ -47,11 +47,6 @@ export function Footer() {
                   Insights Hub
                 </Link>
               </li>
-              <li>
-                <Link href="/contact" className="text-muted-foreground hover:text-primary">
-                  Contact
-                </Link>
-              </li>
             </ul>
           </div>
 

@@ -4,13 +4,12 @@ import { useState } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
-import { Menu, BarChart3, Home, FileText, MessageSquare } from "lucide-react"
+import { Menu, BarChart3, Home, FileText } from "lucide-react"
 
 const navigation = [
   { name: "Home", href: "/", icon: Home },
   { name: "Log Analyzer", href: "/analyzer", icon: BarChart3 },
   { name: "Insights Hub", href: "/insights", icon: FileText },
-  { name: "Contact", href: "/contact", icon: MessageSquare },
 ]
 
 export function Navbar() {

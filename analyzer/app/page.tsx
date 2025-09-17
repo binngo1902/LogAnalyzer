@@ -284,7 +284,7 @@ export default function HomePage() {
                 </Link>
               </Button>
               <Button size="lg" variant="outline" className="border-white text-white hover:bg-white hover:text-primary" asChild>
-                <Link href="/contact">Contact Us</Link>
+                <Link href="/insights">Explore Insights</Link>
               </Button>
             </div>
           </div>

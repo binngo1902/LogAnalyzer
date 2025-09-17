@@ -116,7 +116,6 @@ class LogAnalyzer {
     const analyzeBtn = document.getElementById("analyzeBtn")
     const dropbox = document.getElementById("dropbox")
     const fileListContainer = document.getElementById("fileListContainer")
-    const removeFileBtn = document.getElementById("removeFile")
     const clearDataBtn = document.getElementById("clearData")
     const exportReportBtn = document.getElementById("exportReport")
     const applyDateRangeBtn = document.getElementById("applyDateRange")
@@ -1192,7 +1191,7 @@ class LogAnalyzer {
         userAgent,
       }
       this.updateDailyStats(entry)
-    } catch (error) {
+    } catch {
       // Ignore lines with invalid dates
     }
   }
@@ -1231,7 +1230,7 @@ class LogAnalyzer {
         try {
           const referrerUrl = new URL(entry.referer)
           referrerDomain = referrerUrl.hostname
-        } catch (e) {
+        } catch {
           /* Ignore invalid URLs */
         }
       }

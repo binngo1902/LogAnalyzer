@@ -3,14 +3,9 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { ArrowLeft, Calendar, Clock, User, Share2, BookOpen, FileText, TrendingUp } from "lucide-react"
 import Link from "next/link"
-
+import { use } from "react";
 import { blogPosts, getBlogPostById, getBlogPostParams } from "../data"
 
-interface BlogPostPageProps {
-  params: {
-    id: string
-  }
-}
 
 export const dynamic = "force-static"
 export const dynamicParams = false
@@ -19,8 +14,9 @@ export function generateStaticParams() {
   return getBlogPostParams()
 }
 
-export default function BlogPostPage({ params }: BlogPostPageProps) {
-  const post = getBlogPostById(params.id)
+export default function BlogPostPage({ params }:  {params: Promise<{ id: string }>}) {
+  const { id } =  use(params);
+  const post = getBlogPostById(id)
 
   if (!post) {
     return (

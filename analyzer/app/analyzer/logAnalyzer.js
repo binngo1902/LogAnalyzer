@@ -1755,6 +1755,14 @@ export class LogAnalyzer {
       rowHTML += `<td><strong>${rowData.totalHits.toLocaleString()}</strong></td>`
       row.innerHTML = rowHTML
     })
+    // Add sum row
+    const sumRow = tbody.insertRow()
+    let sumRowHTML = `<td><strong>Total</strong></td>`
+    selectedBots.forEach((botName) => {
+      const botTotal = top100.reduce((sum, row) => sum + (row.botCounts[botName] || 0), 0)
+      sumRowHTML += `<td><strong>${botTotal.toLocaleString()}</strong></td>`
+    })
+    sumRow.innerHTML = sumRowHTML
   }
 
   createTrafficSourceTable(humanReferrers) {
@@ -1807,6 +1815,15 @@ export class LogAnalyzer {
       rowHTML += `<td><strong>${rowData.totalHits.toLocaleString()}</strong></td>`
       row.innerHTML = rowHTML
     })
+
+    // Add sum row
+    const sumRow = tbody.insertRow()
+    let sumRowHTML = `<td><strong>Total</strong></td>`
+    selectedReferrers.forEach((ref) => {
+      const refTotal = top100.reduce((sum, row) => sum + (row.referrerCounts[ref] || 0), 0)
+      sumRowHTML += `<td><strong>${refTotal.toLocaleString()}</strong></td>`
+    })
+    sumRow.innerHTML = sumRowHTML
   }
 
   formatBytes(bytes) {

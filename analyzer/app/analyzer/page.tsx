@@ -424,6 +424,26 @@ const AnalyzerPage = () => {
                                 <button className="export-btn" data-chart="botDistribution">Export</button>
                             </div>
                             <canvas id="botDistributionChart"></canvas>
+                        </div> 
+                        <div className="table-container">
+                            <div className="chart-header">
+                                <h3>Bot Details</h3>
+                                <button className="export-btn" data-table="bots">Export CSV</button>
+                            </div>
+                            <div className="table-wrapper">
+                                <table id="botDetailsTable">
+                                    <thead>
+                                        <tr>
+                                            <th>Bot Name</th>
+                                            <th>Type</th>
+                                            <th>Requests</th>
+                                            <th>Percentage</th>
+                                            <th>Last Seen</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
                         </div>
                         <div className="table-container">
                             <div className="chart-header">
@@ -461,26 +481,7 @@ const AnalyzerPage = () => {
                                 </table>
                             </div>
                         </div>
-                        <div className="table-container">
-                            <div className="chart-header">
-                                <h3>Bot Details</h3>
-                                <button className="export-btn" data-table="bots">Export CSV</button>
-                            </div>
-                            <div className="table-wrapper">
-                                <table id="botDetailsTable">
-                                    <thead>
-                                        <tr>
-                                            <th>Bot Name</th>
-                                            <th>Type</th>
-                                            <th>Requests</th>
-                                            <th>Percentage</th>
-                                            <th>Last Seen</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody></tbody>
-                                </table>
-                            </div>
-                        </div>
+                      
                         <div className="interactive-table-card full-width">
                             <div className="chart-header">
                                 <h3>Bot Hits per URL</h3>

@@ -1,0 +1,6 @@
+User-Agent: *
+Allow: /
+Disallow: /contact
+
+Host: https://www.logfile.online
+Sitemap: https://www.logfile.online/sitemap.xml

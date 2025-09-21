@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360" fill="none">
+  <rect width="640" height="360" rx="20" fill="#0B1120"/>
+  <rect x="32" y="32" width="576" height="296" rx="16" fill="#0F172A" stroke="#1E293B" stroke-width="2"/>
+  <text x="56" y="80" fill="#F8FAFC" font-family="Inter, Helvetica, Arial, sans-serif" font-size="18" font-weight="600">Incident Timeline</text>
+  <g transform="translate(56,104)">
+    <circle cx="12" cy="12" r="12" fill="#F97316"/>
+    <rect x="40" y="0" width="200" height="24" rx="6" fill="#111C33"/>
+    <text x="48" y="17" fill="#F8FAFC" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12">02:11 · Error spike detected</text>
+  </g>
+  <g transform="translate(60,140)">
+    <rect x="8" y="0" width="2" height="152" fill="#1E293B"/>
+  </g>
+  <g transform="translate(56,168)">
+    <circle cx="12" cy="12" r="12" fill="#38BDF8"/>
+    <rect x="40" y="0" width="240" height="24" rx="6" fill="#111C33"/>
+    <text x="48" y="17" fill="#F8FAFC" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12">02:14 · Log query pinned in war room</text>
+  </g>
+  <g transform="translate(56,232)">
+    <circle cx="12" cy="12" r="12" fill="#34D399"/>
+    <rect x="40" y="0" width="256" height="24" rx="6" fill="#111C33"/>
+    <text x="48" y="17" fill="#F8FAFC" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12">02:21 · Fix merged + automated rollback</text>
+  </g>
+  <g transform="translate(332,96)">
+    <rect width="244" height="56" rx="12" fill="#111C33" stroke="#2563EB" stroke-opacity="0.4"/>
+    <text x="20" y="28" fill="#BFDBFE" font-family="Inter, Helvetica, Arial, sans-serif" font-size="13">On-call: SRE rotation · PagerDuty</text>
+    <text x="20" y="44" fill="#64748B" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11">channel synced with #incident-482</text>
+  </g>
+  <g transform="translate(332,172)">
+    <rect width="244" height="104" rx="12" fill="#111C33" stroke="#38BDF8" stroke-opacity="0.4"/>
+    <text x="20" y="32" fill="#F8FAFC" font-family="Inter, Helvetica, Arial, sans-serif" font-size="14" font-weight="500">Key Signals</text>
+    <text x="20" y="56" fill="#93C5FD" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12">• CPU saturation cleared</text>
+    <text x="20" y="76" fill="#93C5FD" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12">• Error rate returning to baseline</text>
+    <text x="20" y="96" fill="#93C5FD" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12">• Customers impacted: 4%</text>
+  </g>
+  <g transform="translate(332,288)">
+    <rect width="244" height="24" rx="6" fill="#111C33"/>
+    <text x="20" y="17" fill="#64748B" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11">Post-incident review scheduled · 09:30</text>
+  </g>
+</svg>
